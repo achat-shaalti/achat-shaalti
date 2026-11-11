@@ -288,7 +288,7 @@
       return { ok: true };
     },
     '/sys/power': function (b) {
-      if (M.kiosk.active && b.action !== 'lock') throw mockErr('locked', 'הפעולה חסומה במצב נעילה');
+      if (M.kiosk.active && (b.action === 'restart' || b.action === 'shutdown' || b.action === 'signout') && !b.password) throw mockErr('wrong_password', 'הסיסמה שגויה');
       return { ok: true };
     },
     '/kiosk/status': function () { tempSync(); return Object.assign(clone(M.kiosk), { hard: clone(M.hard) }); },
@@ -586,8 +586,10 @@
     return { vendor: M.bios.vendor, manufacturer: M.bios.manufacturer, model: M.bios.model, steps: steps };
   };
   mockRoutes['/sys/update-check'] = function () {
-    return { current: '1.0.5', latest: '1.0.5', newer: false, canInstall: false, url: 'https://github.com/Hadabadra/achat-shaalti/releases/latest' };
+    return { current: '1.0.5', latest: '1.0.5', newer: false, canInstall: false, url: 'https://github.com/achat-shaalti/achat-shaalti/releases/latest' };
   };
+  mockRoutes['/sys/update-local-pick'] = function () { return { cancelled: true }; };
+  mockRoutes['/sys/update-local-install'] = function () { return { started: false, message: 'תצוגה מקדימה: אין התקנה' }; };
   mockRoutes['/sys/update-install'] = function () { return { started: false, message: 'הגשר מעודכן (1.0.3)' }; };
 
   var mock = {

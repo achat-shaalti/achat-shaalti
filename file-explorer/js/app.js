@@ -6,8 +6,8 @@
   FX.ui = ui;
   FX.t = window.I18N ? window.I18N.t : function (x) { return x; };
   FX.VERSION = '1.0.5';
-  FX.CHANGELOG_URL = 'https://github.com/Hadabadra/achat-shaalti/blob/main/CHANGELOG.md';
-  FX.BRIDGE_URL = 'https://github.com/Hadabadra/achat-shaalti/releases/latest';
+  FX.CHANGELOG_URL = 'https://github.com/achat-shaalti/achat-shaalti/blob/main/CHANGELOG.md';
+  FX.BRIDGE_URL = 'https://github.com/achat-shaalti/achat-shaalti/releases/latest';
 
   var LS = 'fx.view';
   var S = {
@@ -1194,7 +1194,7 @@
       if (act === 'close') { close(); return; }
       if (act === 'fb') { sendFeedback(); return; }
       if (act === 'changelog') { if (window.renderChangelog && ui.dialog) { ui.dialog({ title: 'יומן שינויים — סייר קבצים', body: window.renderChangelog(), actions: [{ label: 'סגירה', value: true, kind: 'primary' }] }); } else openUrl(FX.CHANGELOG_URL); return; }
-      if (act === 'releases') { openUrl('https://github.com/Hadabadra/achat-shaalti/releases/latest'); return; }
+      if (act === 'releases') { openUrl('https://github.com/achat-shaalti/achat-shaalti/releases/latest'); return; }
       if (act === 'reset') {
         if (!(await ui.confirm('איפוס הגדרות', '<p>להחזיר את הגדרות הסייר לברירת המחדל?</p>', 'איפוס'))) return;
         saveOpts(Object.assign({}, OPT_DEF)); FX.layout.setZoom(0.9); FX.layout.setMode('details'); FX.layout.setPanes(false, false);
@@ -1943,7 +1943,13 @@
     }
   }
 
-  FX.app = { go: go, refresh: refresh, connect: connect, afterPolicy: afterPolicy, selected: function () { return S.prov ? selected() : []; }, prov: function () { return S.prov; } };
+  /* אחים של קובץ בצופה: קבצים באותה תיקייה מתוך הרשימה המוצגת (לא תיקיות/כוננים/ספרי אוצריא) */
+  function viewerSiblings(entry) {
+    function dir(p) { var i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')); return i < 0 ? '' : p.slice(0, i); }
+    var d = dir(entry.path || '');
+    return (S.view || []).filter(function (e) { return e.type !== 'dir' && e.type !== 'drive' && !e.otzBook && dir(e.path || '') === d; });
+  }
+  FX.app = { siblings: viewerSiblings, open: function (e) { return openEntry(e); }, go: go, refresh: refresh, connect: connect, afterPolicy: afterPolicy, selected: function () { return S.prov ? selected() : []; }, prov: function () { return S.prov; } };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
