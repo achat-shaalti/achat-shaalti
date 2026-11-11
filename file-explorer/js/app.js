@@ -6,8 +6,8 @@
   FX.ui = ui;
   FX.t = window.I18N ? window.I18N.t : function (x) { return x; };
   FX.VERSION = '1.0.5';
-  FX.CHANGELOG_URL = 'https://github.com/Hadabadra/achat-shaalti/blob/main/CHANGELOG.md';
-  FX.BRIDGE_URL = 'https://github.com/Hadabadra/achat-shaalti/releases/latest';
+  FX.CHANGELOG_URL = 'https://github.com/achat-shaalti/achat-shaalti/blob/main/CHANGELOG.md';
+  FX.BRIDGE_URL = 'https://github.com/achat-shaalti/achat-shaalti/releases/latest';
 
   var LS = 'fx.view';
   var S = {
@@ -43,6 +43,8 @@
       if (S.prov) v['last.' + S.prov.kind] = S.recycle ? '' : S.path;
       localStorage.setItem(LS, JSON.stringify(v));
     } catch (e) { /* אחסון לא זמין */ }
+    /* SDK 0.9.98.1: מצב קטן לשחזור — מאפשר לאוצריא לפנות כרטיסייה שלא בשימוש ולטעון אותה מחדש באותה תיקייה */
+    try { if (window.Otzaria && S.prov) window.Otzaria.call('plugin.setRestoreState', { state: { schemaVersion: 1, path: S.recycle ? '' : S.path } }).catch(function () {}); } catch (e) { /* מארח ישן */ }
   }
 
   /* ---------- פתיחת קישור והעתקה ללוח ---------- */
@@ -1124,7 +1126,7 @@
       '<img src="icon/brand.svg" alt="אחת שאלתי" width="144" height="144" style="display:block;margin:0 auto 12px">' +
       '<h3>סייר קבצים</h3><p class="muted">גרסה ' + FX.esc(FX.VERSION) + ' · חד בדרא, יאיר דניאל</p>' +
       '<p>עיון וניהול קבצים מתוך אוצריא: העתקה, העברה, מחיקה, שינוי שם, חיפוש, סל מיחזור, וצפייה ב-PDF, Word, טקסט ותמונות. עם אחת שאלתי — גישה לכל המחשב; בלעדיו — לתיקיות שאישרתם.</p></div></div>' +
-      '<div class="fx-set-card fx-set-memorial"><p>לעילוי נשמת</p><b>אסתר גיטה דינר בת רבי מיכאל שלום הלוי שיבדלט"א</b><p>תנצב"ה</p></div>' +
+      '<div class="fx-set-card"><div class="fx-set-title">' + ic('info') + 'דיווחים</div>' + (window.Feedback && window.Feedback.crashToggleHtml ? window.Feedback.crashToggleHtml() : '') + '</div>' +
       '<div class="fx-set-card"><div class="fx-set-title">' + ic('info') + 'אחת שאלתי</div>' +
       setRow(b ? 'מחובר · גרסה ' + FX.esc(b.version || '?') : 'הגשר אינו מחובר', b ? '' : 'בלי הגשר הסייר עובד על תיקיות שאישרתם בלבד',
         '') + /* #59: בדיקת עדכונים רק בגשר */
@@ -1191,8 +1193,8 @@
       var act = t.dataset.act;
       if (act === 'close') { close(); return; }
       if (act === 'fb') { sendFeedback(); return; }
-      if (act === 'changelog') { openUrl(FX.CHANGELOG_URL); return; }
-      if (act === 'releases') { openUrl('https://github.com/Hadabadra/achat-shaalti/releases/latest'); return; }
+      if (act === 'changelog') { if (window.renderChangelog && ui.dialog) { ui.dialog({ title: 'יומן שינויים — סייר קבצים', body: window.renderChangelog(), actions: [{ label: 'סגירה', value: true, kind: 'primary' }] }); } else openUrl(FX.CHANGELOG_URL); return; }
+      if (act === 'releases') { openUrl('https://github.com/achat-shaalti/achat-shaalti/releases/latest'); return; }
       if (act === 'reset') {
         if (!(await ui.confirm('איפוס הגדרות', '<p>להחזיר את הגדרות הסייר לברירת המחדל?</p>', 'איפוס'))) return;
         saveOpts(Object.assign({}, OPT_DEF)); FX.layout.setZoom(0.9); FX.layout.setMode('details'); FX.layout.setPanes(false, false);
@@ -1623,7 +1625,9 @@
       savePrefs(); refresh();
     });
     $('fx-add-folder').addEventListener('click', addFolder);
-    $('fx-settings').addEventListener('click', settingsDialog);
+    $('fx-settings').addEventListener('click', function () { settingsDialog(); });
+    $('fx-about').innerHTML = ic('info');
+    $('fx-about').addEventListener('click', function () { settingsDialog('about'); });
     $('fx-feedback').innerHTML = window.Feedback.ICON;
     $('fx-feedback').addEventListener('click', sendFeedback);
 
@@ -1866,6 +1870,7 @@
     S.booted = true;
     if (payload && payload.theme) ui.applyTheme(payload.theme);
     if (payload && payload.plugin && payload.plugin.version) FX.VERSION = payload.plugin.version;
+    setTimeout(function () { window.Feedback.reportCrashes({ plugin: 'סייר קבצים', version: FX.VERSION, bridge: FX.Bridge, restore: payload && payload.restore }); }, 6000);
     try { await window.I18N.init(payload); } catch (e) { /* נשארים בעברית */ }
     var lb = $('fx-lang');
     lb.textContent = window.I18N.toggleLabel();
@@ -1938,7 +1943,13 @@
     }
   }
 
-  FX.app = { go: go, refresh: refresh, connect: connect, afterPolicy: afterPolicy, selected: function () { return S.prov ? selected() : []; }, prov: function () { return S.prov; } };
+  /* אחים של קובץ בצופה: קבצים באותה תיקייה מתוך הרשימה המוצגת (לא תיקיות/כוננים/ספרי אוצריא) */
+  function viewerSiblings(entry) {
+    function dir(p) { var i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\')); return i < 0 ? '' : p.slice(0, i); }
+    var d = dir(entry.path || '');
+    return (S.view || []).filter(function (e) { return e.type !== 'dir' && e.type !== 'drive' && !e.otzBook && dir(e.path || '') === d; });
+  }
+  FX.app = { siblings: viewerSiblings, open: function (e) { return openEntry(e); }, go: go, refresh: refresh, connect: connect, afterPolicy: afterPolicy, selected: function () { return S.prov ? selected() : []; }, prov: function () { return S.prov; } };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

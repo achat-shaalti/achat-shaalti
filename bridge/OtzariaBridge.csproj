@@ -21,6 +21,12 @@
     <InvariantGlobalization>false</InvariantGlobalization>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <NoWarn>$(NoWarn);CA1416;CS8632</NoWarn>
+    <!-- חוסם DOTNET_STARTUP_HOOKS: משתמש רגיל היה מזריק קוד לגשר דרך משתנה סביבה (HKCU\Environment). גם מסוננים ב-Native.Launch -->
+    <StartupHookSupport>false</StartupHookSupport>
+    <!-- נעילת שרשרת אספקה (U3): packages.lock.json נשמר בריפו, וב-CI (CI=true) restore נכשל אם גרסה/hash שונו. עדכון חבילה: dotnet restore עם force-evaluate -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,12 +37,18 @@
          מאת Eliyahu Hershfeld (kosherjava.com), רישיון LGPL-2.1. PackageReference רגיל
          (קישור דינמי, לא קוד מועתק) — ראו README.md וחלון "אודות" לקרדיט המלא -->
     <PackageReference Include="Zmanim" Version="1.5.0" />
+    <!-- ענף mail-plugin: קבלת דואר (IMAP) לתוסף "דואר" — bridge/MailApi.cs. MailKit/MimeKit, רישיון MIT -->
+    <PackageReference Include="MailKit" Version="4.8.0" />
     <PackageReference Include="Interop.UIAutomationClient" Version="10.19041.0" />
+    <!-- נעוץ במפורש: אחרת ה-SDK מוסיף גרסה לפי ה-SDK המותקן (שונה בין מחשב ל-runner) וקובץ הנעילה נכשל ב-CI -->
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="8.0.31" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- התוספים נארזים ב-CI לתיקייה plugins ומוטמעים כמשאב -->
   <ItemGroup>
     <EmbeddedResource Include="plugins\*.otzplugin" LogicalName="plugins.%(Filename)%(Extension)" />
+    <!-- תוספים מוצעים (לא חובה): נפרסים ל-plugins\optional ומותקנים רק אם המשתמש בחר (ר' Installer.InstallOptionalPlugins) -->
+    <EmbeddedResource Include="..\optional-plugins\*.otzplugin" LogicalName="optional.%(Filename)%(Extension)" />
     <!-- יומן השינויים מוטמע, כדי שיהיה זמין במגש בלי רשת -->
     <EmbeddedResource Include="..\CHANGELOG.md" LogicalName="CHANGELOG.md" />
     <EmbeddedResource Include="..\assets\icon-source.png" LogicalName="brand-1024.png" />

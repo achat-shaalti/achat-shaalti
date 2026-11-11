@@ -32,8 +32,7 @@ internal sealed class SideBar : Form
     public SideBar()
     {
         FormBorderStyle = FormBorderStyle.None;
-        ShowInTaskbar = false;
-        TopMost = true;
+        ShowInTaskbar = false;   // [x2] בלי Form.TopMost (גניבת פוקוס): WS_EX_TOPMOST ב-CreateParams
         StartPosition = FormStartPosition.Manual;
         DoubleBuffered = true;
         BackColor = Color.FromArgb(24, 30, 40);
@@ -70,7 +69,7 @@ internal sealed class SideBar : Form
     // שגם מריץ את hook המקלדת: חסימה שם מאטה/מנתקת את ה-hook ותוקעת את המקלדת והעכבר (נראה כמו "נתקע בנעילה")
     public void Rebuild()
     {
-        Task.Run(() =>
+        SafeTask.Run(() =>
         {
             List<Programs.Entry> progs = null;
             try { progs = Programs.Load(); } catch { }
@@ -85,6 +84,9 @@ internal sealed class SideBar : Form
         // #60 (גרסה מינימלית): גישה לחלונות הגשר בנעילה, מתוך הסרגל הקיים
         Bitmap bi = null; try { bi = Icon.ExtractAssociatedIcon(Environment.ProcessPath!)?.ToBitmap(); } catch { }
         // משוב 15.10: בסרגל הנעילה פריט אחד — החלון הראשי עם כל הטאבים (אודות, מה חדש, דיווחים, צימוד, כלים וצילום מסך)
+        // מסך מגע בלי מקלדת: פריט שפותח את המקלדת הווירטואלית של Windows (אופציונלי, כבוי כברירת מחדל)
+        if (Config.Get("kiosk.sideBarKeyboard", false))
+            list.Add(new Item { Name = Lang.T("מקלדת וירטואלית", "On-screen keyboard"), Icon = IconOf(System.IO.Path.Combine(Environment.SystemDirectory, "osk.exe")), UiAction = OpenScreenKeyboard });
         list.Add(new Item { Name = Lang.T(Program.AppName, Program.AppNameEn), Icon = bi, UiAction = () => AboutForm.Open() });
         foreach (var old in _items) old.Icon?.Dispose();
         _items = list;
@@ -93,6 +95,12 @@ internal sealed class SideBar : Form
         if (!Visible) Show();
         _tick.Start();
         Scan();
+    }
+
+    private static void OpenScreenKeyboard()
+    {
+        try { Process.Start(new ProcessStartInfo(System.IO.Path.Combine(Environment.SystemDirectory, "osk.exe")) { UseShellExecute = true }); }
+        catch (Exception ex) { Config.Log("screen keyboard: " + ex.Message); }
     }
 
     /// <summary>האייקון המקורי של קובץ ההפעלה (מה-exe עצמו); null אם אין קובץ או שהשליפה נכשלה</summary>
@@ -160,7 +168,7 @@ internal sealed class SideBar : Form
         _flyout ??= new Flyout(h =>
         {
             _flyout.Hide();
-            Task.Run(() => { try { Kiosk.BringToFront(h); } catch (Exception ex) { Config.Log("sidebar flyout: " + ex.Message); } });
+            SafeTask.Run(() => { try { Kiosk.BringToFront(h); } catch (Exception ex) { Config.Log("sidebar flyout: " + ex.Message); } });
         });
         _flyout.ShowFor(it.Windows, RectangleToScreen(RowRect(i)), _horizontal, _edge, S);
     }
@@ -170,7 +178,7 @@ internal sealed class SideBar : Form
         _lastScan = DateTime.UtcNow;
         if (Interlocked.Exchange(ref _scanBusy, 1) == 1) return;
         var snapshot = _items.ToList();
-        Task.Run(() =>
+        SafeTask.Run(() =>
         {
             try
             {
@@ -214,7 +222,7 @@ internal sealed class SideBar : Form
         if (i < 0 || i >= _items.Count) return;
         var it = _items[i];
         if (it.UiAction != null) { Tray.Invoke(it.UiAction); return; }
-        Task.Run(() =>
+        SafeTask.Run(() =>
         {
             try
             {
@@ -328,8 +336,7 @@ internal sealed class SideBar : Form
         {
             _activate = activate;
             FormBorderStyle = FormBorderStyle.None;
-            ShowInTaskbar = false;
-            TopMost = true;
+            ShowInTaskbar = false;   // [x2] בלי Form.TopMost (גניבת פוקוס): WS_EX_TOPMOST ב-CreateParams
             StartPosition = FormStartPosition.Manual;
             DoubleBuffered = true;
             BackColor = Color.FromArgb(24, 30, 40);
@@ -519,12 +526,14 @@ internal sealed class EmergencyForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
         Font = new Font("Segoe UI", 10.5f);
-        ClientSize = new Size(420, 190);
-        var info = new Label { Text = Lang.T("הזינו את קוד השחזור (12 תווים) או קוד גיבוי חד-פעמי כדי לבטל את הנעילה כולה.", "Enter the 12-character recovery code or a one-time backup code to turn off lock mode completely."), Dock = DockStyle.Top, Height = 56, Padding = new Padding(12, 12, 12, 0) };
-        var code = new TextBox { Dock = DockStyle.Top, Font = new Font("Consolas", 14f), TextAlign = HorizontalAlignment.Center, CharacterCasing = CharacterCasing.Upper, RightToLeft = RightToLeft.No };
+        ClientSize = new Size(440, 270);
+        var info = new Label { Text = Lang.T("הזינו את סיסמת הנעילה, קוד השחזור (12 תווים) או קוד גיבוי חד-פעמי כדי לבטל את הנעילה כולה. לעדכון אוצריא: מצב תחזוקה (30 דקות).", "Enter the lock password, the 12-character recovery code or a one-time backup code to turn off lock mode completely. For updating Otzaria: maintenance mode (30 min)."), Dock = DockStyle.Top, Height = 72, Padding = new Padding(12, 12, 12, 0) };
+        var code = new TextBox { Dock = DockStyle.Top, Font = new Font("Consolas", 14f), TextAlign = HorizontalAlignment.Center, UseSystemPasswordChar = true, RightToLeft = RightToLeft.No };
         var msg = new Label { Dock = DockStyle.Top, Height = 28, ForeColor = Color.Firebrick, TextAlign = ContentAlignment.MiddleCenter };
         var ok = new Button { Text = Lang.T("בטל נעילה", "Unlock"), Dock = DockStyle.Bottom, Height = 40 };
-        Controls.AddRange(new Control[] { ok, msg, code, info });
+        var maint = new Button { Text = Lang.T("מצב תחזוקה (30 דקות)", "Maintenance mode (30 min)"), Dock = DockStyle.Bottom, Height = 36 };
+        Controls.AddRange(new Control[] { maint, ok, msg, code, info });
+        UiStyle.Button(maint, primary: false); maint.AutoSize = false; maint.Height = 40; maint.Margin = Padding.Empty;
         UiStyle.Button(ok, primary: true); ok.AutoSize = false; ok.Height = 44; ok.Margin = Padding.Empty;
         UiStyle.Theme(this);
         info.ForeColor = UiStyle.GoldText;
@@ -534,10 +543,18 @@ internal sealed class EmergencyForm : Form
             try
             {
                 if (Kiosk.EmergencyRelease(code.Text)) { Close(); return; }
-                msg.Text = Lang.T("הקוד שגוי", "Wrong code");
+                // לא קוד שחזור/גיבוי: מנסים כסיסמת הנעילה הרגילה (אותה השהיית ניסיונות ו-Hello כמו ב-/kiosk/disable)
+                Kiosk.UnlockWithPassword(code.Text);
+                Close(); return;
             }
-            catch (Exception ex) { msg.Text = ex.Message; } // למשל נעילה זמנית אחרי כמה ניסיונות כושלים - בלי זה אין שום הודעה
+            catch (BridgeException ex) { msg.Text = ex.Message; } // למשל סיסמה שגויה / נעילה זמנית אחרי כמה ניסיונות כושלים
+            catch (Exception ex) { msg.Text = ex.Message; }
             code.SelectAll();
+        };
+        maint.Click += (_, _) =>
+        {
+            try { Kiosk.StartMaintenance(code.Text); Close(); }
+            catch (Exception ex) { msg.Text = ex.Message; code.SelectAll(); }
         };
         Shown += (_, _) => code.Focus();
     }
@@ -549,8 +566,8 @@ internal sealed class EmergencyForm : Form
 /// </summary>
 internal static class Diagnostics_
 {
-    public const string IssuesUrl = "https://github.com/Hadabadra/achat-shaalti/issues/new";
-    private static readonly Regex Secret = new("(hash|salt|key|secret|password|token|recovery)", RegexOptions.IgnoreCase);
+    public const string IssuesUrl = "https://github.com/achat-shaalti/achat-shaalti/issues/new";
+    private static readonly Regex Secret = new("(hash|salt|key|secret|password|token|recovery|client|auth)", RegexOptions.IgnoreCase);
 
     public static void Report()
     {

@@ -1,8 +1,15 @@
 // #65 — מתווך דיווחי תקלות: מקבל דיווח מהגשר ופותח issue ב-GitHub. הטוקן נשמר רק כאן (GH_TOKEN, Secret).
 // בלי KV: כפילות נבדקת בחיפוש ב-GitHub (fingerprint פתוח), מגבלה יומית לפי issues עם auto-report מהיום,
 // ומגבלה לכל IP בזיכרון ה-Worker (5 לשעה, הגנה בסיסית). גוף ≤ 8000 תווים.
+// WHY (הצפת כפילויות): אם חיפוש ה-GitHub נכשל — נכשלים סגור (503), לא "אין כפילות". בנוסף, מגבלה לכל fingerprint:
+// ב-KV אם מוגדר binding בשם DEDUPE (אופציונלי, לא חובה), ואחרת בזיכרון ה-isolate כגיבוי.
 const ipHits = new Map();
+const fpHits = new Map();
+const FP_MAX = 1; // דיווח אחד לכל fingerprint ביממה
 const DAILY_MAX = 30;
+// WHY: הריפו עבר לארגון achat-shaalti. ברירת מחדל אם GH_REPO/GH_REPOS לא הוגדרו (לא ריפו ישן), ושם קצר של ריפו מקבל את הארגון הזה.
+const DEFAULT_ORG = 'achat-shaalti';
+const DEFAULT_REPO = DEFAULT_ORG + '/achat-shaalti';
 
 export default {
   async fetch(req, env) {
@@ -11,8 +18,8 @@ export default {
     try { d = await req.json(); } catch { return new Response('bad json', { status: 400 }); }
     const { title, body, fingerprint, version, kind, plugin } = d || {};
     // #70: repo לפי רשימה סגורה (GH_REPOS, מופרד בפסיקים); ברירת מחדל GH_REPO
-    const allowed = String(env.GH_REPOS || env.GH_REPO).split(',').map(x => x.trim()).filter(Boolean);
-    const want = typeof d.repo === 'string' && d.repo ? (d.repo.includes('/') ? d.repo : 'e0548433917-gif/' + d.repo) : env.GH_REPO;
+    const allowed = String(env.GH_REPOS || env.GH_REPO || DEFAULT_REPO).split(',').map(x => x.trim()).filter(Boolean);
+    const want = typeof d.repo === 'string' && d.repo ? (d.repo.includes('/') ? d.repo : DEFAULT_ORG + '/' + d.repo) : (env.GH_REPO || DEFAULT_REPO);
     if (!allowed.includes(want)) return new Response('repo not allowed', { status: 400 });
     const manual = kind === 'manual';
     if (typeof title !== 'string' || typeof body !== 'string' || !/^[0-9a-f]{16}$/.test(fingerprint || '') ||
@@ -26,18 +33,33 @@ export default {
     if (ipHits.size > 5000) ipHits.clear();
 
     const repo = want;
+    // WHY (04.11): אחרי העברת הריפו לארגון, POST לשם הישן קיבל 301 ו-fetch המיר אותו ל-GET שהחזיר 200 —
+    // הדיווח "הצליח" בלי issue. לא עוקבים אחרי הפניות, והצלחה רק ב-201.
     const gh = (path, init = {}) => fetch('https://api.github.com' + path, {
+      redirect: 'manual',
       ...init,
       headers: { authorization: 'Bearer ' + env.GH_TOKEN, 'user-agent': 'achat-shaalti-relay', accept: 'application/vnd.github+json', ...(init.headers || {}) }
     });
     const search = async q => {
       const r = await gh('/search/issues?per_page=1&q=' + encodeURIComponent(q));
-      return r.ok ? (await r.json()).total_count : 0;
+      if (!r.ok) throw new Error('search ' + r.status); // fail-closed: לא מחזירים 0 בכישלון
+      return (await r.json()).total_count;
     };
 
-    if (await search(`repo:${repo} is:issue is:open in:body fp-${fingerprint}`)) return new Response('duplicate', { status: 409 });
-    const today = new Date().toISOString().slice(0, 10);
-    if (await search(`repo:${repo} is:issue label:${manual ? 'user-feedback' : 'auto-report'} created:>=${today}`) >= DAILY_MAX) return new Response('rate', { status: 429 });
+    // מגבלה לפי fingerprint — לפני החיפוש, כי אינדקס החיפוש של GitHub מתעכב ודיווח חדש לא נראה בו מיד
+    const day = new Date().toISOString().slice(0, 10), fk = repo + ':' + fingerprint + ':' + day;
+    try {
+      if (env.DEDUPE) { if (await env.DEDUPE.get(fk)) return new Response('duplicate', { status: 409 }); }
+      else if ((fpHits.get(fk) || 0) >= FP_MAX) return new Response('duplicate', { status: 409 });
+    } catch { return new Response('dedupe unavailable', { status: 503 }); }
+
+    let dup, daily;
+    try {
+      dup = await search(`repo:${repo} is:issue is:open in:body fp-${fingerprint}`);
+      if (dup) return new Response('duplicate', { status: 409 });
+      daily = await search(`repo:${repo} is:issue label:${manual ? 'user-feedback' : 'auto-report'} created:>=${day}`);
+    } catch { return new Response('dedupe unavailable', { status: 503 }); }
+    if (daily >= DAILY_MAX) return new Response('rate', { status: 429 });
 
     const r = await gh(`/repos/${repo}/issues`, {
       method: 'POST',
@@ -47,7 +69,11 @@ export default {
         labels: [manual ? 'user-feedback' : 'auto-report']
       })
     });
-    if (!r.ok) return new Response('github ' + r.status, { status: 502 });
+    if (r.status !== 201) return new Response('github ' + r.status, { status: 502 });
+    try {
+      if (env.DEDUPE) await env.DEDUPE.put(fk, '1', { expirationTtl: 86400 });
+      else { fpHits.set(fk, 1); if (fpHits.size > 5000) fpHits.clear(); }
+    } catch { /* הדיווח כבר נפתח — לא מכשילים */ }
     return new Response('ok', { status: 201 });
   }
 };

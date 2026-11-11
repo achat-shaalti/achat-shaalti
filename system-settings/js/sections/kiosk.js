@@ -34,7 +34,7 @@
     var st;
     /* מצב הנעילה חיוני - ממתינים לו בלי תקרה (המונה ממשיך), ובכשל אמיתי מנסים שוב אוטומטית פעמיים */
     /* משוב 3.9: הטאב נפתח מיד כמו שאר הטאבים - מהמצב האחרון שנשמר, ומתעדכן כשהגשר עונה */
-    var live = body.__kioskLive || SS.bridge.call('/kiosk/status', {}, { timeoutMs: 120000 }); body.__kioskLive = null;
+    var live = body.__kioskLive || bcall('/kiosk/status', {}, { timeoutMs: 120000 }); body.__kioskLive = null;
     if (!body.__kioskShown) {
       var cached = null;
       try { cached = JSON.parse(localStorage.getItem('ss.kiosk.status') || 'null'); } catch (e) { cached = null; }
@@ -42,11 +42,9 @@
     }
     body.__kioskShown = false;
     for (var i = 0; ; i++) {
-      try { st = await (i === 0 ? live : SS.bridge.call('/kiosk/status', {}, { timeoutMs: 120000 })); try { localStorage.setItem('ss.kiosk.status', JSON.stringify(st)); } catch (e) { } break; }
-      catch (e) { if (i >= 2) throw e; setStep('מצב נעילה (ניסיון ' + (i + 2) + ')'); await new Promise(function (r) { setTimeout(r, 1000); }); }
+      try { st = await (i === 0 ? live : bcall('/kiosk/status', {}, { timeoutMs: 120000 })); try { localStorage.setItem('ss.kiosk.status', JSON.stringify(st)); } catch (e) { } break; }
+      catch (e) { if (i >= 2) { body.innerHTML = errPanel(e, function () { load(body); }); return; } setStep('מצב נעילה (ניסיון ' + (i + 2) + ')'); await new Promise(function (r) { setTimeout(r, 1000); }); }
     }
-    try { }
-    catch (e) { body.innerHTML = ui.errorBox(e, function () { load(body); }); return; }
     if (SS.bridge.health) { SS.bridge.health.kioskActive = !!st.active; SS.setStatus(true); if (SS.syncLock) SS.syncLock(SS.bridge.health); }
 
     /* ארבע הקריאות האלה בלתי תלויות זו בזו (ולא ב-st) - היו רצות ברצף (await אחד אחרי השני), כך
@@ -55,15 +53,16 @@
        הכולל הוא רק הזמן של האיטית מביניהן, לא הסכום */
     setStep('תוכנות, צימוד ו-BIOS');
     var results = await Promise.all([
-      lim(SS.bridge.call('/kiosk/programs'), 5000, 'תוכנות'),
+      lim(bcall('/kiosk/programs'), 5000, 'תוכנות'),
       /* משוב 15.10: זיהוי תוכנות (סריקת כוננים) איטי והשהה את כל הטאב — כולל ריבוע הגדרות הנעילה.
          התוצאה נשמרת למשך הסשן; אם עוד לא מוכנה אחרי 1.5 שנ' מציגים בלעדיה ומשלימים כשהיא מגיעה */
       detectFast(body),
-      lim(SS.bridge.call('/pair/list', {}), 12000, 'צימוד'),
-      lim(SS.bridge.call('/bios/status', {}), 4000, 'BIOS'),
-      lim(SS.bridge.call('/kiosk/recovery/backup/status', {}), 4000, 'קודי שחזור') /* #69 */
+      lim(bcall('/pair/list', {}), 12000, 'צימוד'),
+      lim(bcall('/bios/status', {}), 4000, 'BIOS'),
+      lim(bcall('/kiosk/recovery/backup/status', {}), 4000, 'קודי שחזור'), /* #69 */
+      lim(bcall('/fs/policy/get', {}), 4000, 'סייר קבצים') /* מצב נעילת הסייר, מוצג ישירות בלי לעבור טאב */
     ]);
-    var pr = results[0], det = results[1], pairsRes = results[2], bios = results[3], backup = results[4];
+    var pr = results[0], det = results[1], pairsRes = results[2], bios = results[3], backup = results[4], fx = results[5];
 
     var progs = (pr && pr.programs) || [];
     st.autoTorah = !!(pr && pr.autoTorah);
@@ -73,12 +72,12 @@
     });
     var pairsKnown = !!pairsRes, pairs = (pairsRes && pairsRes.clients) || [];
 
-    render(body, st, progs, found, pairsKnown ? pairs : null, bios, backup);
+    render(body, st, progs, found, pairsKnown ? pairs : null, bios, backup, fx);
   }
 
   var detPromise = null, detResult = null;
   SS.prefetchDetect = function () {
-    if (!detPromise) detPromise = SS.bridge.call('/kiosk/programs/detect')
+    if (!detPromise) detPromise = bcall('/kiosk/programs/detect')
       .then(function (r) { detResult = r; return r; })
       .catch(function () { detPromise = null; return null; });
     return detPromise;
@@ -99,7 +98,7 @@
   /* ספירה לאחור חיה של הפתיחה הזמנית בכרטיס המצב (מתאפסת בכל רינדור) */
   var tempTimer = null;
 
-  function render(body, st, progs, found, pairs, bios, backup) {
+  function render(body, st, progs, found, pairs, bios, backup, fx) {
     var active = !!st.active;
     var tu = st.tempUnlock || {};
     clearInterval(tempTimer); tempTimer = null;
@@ -128,34 +127,33 @@
         : '') +
       '</div>';
 
-    html += '<details class="card explain"><summary class="card-title">מה עושה מצב נעילה?</summary><ul class="feature-list">' +
+    html += healthPanel(st, bios, backup);
+    html += emergencyCenter(st, backup);
+
+    /* #136.3: כל ההסברים המתקפלים בריבוע אחד */
+    html += '<div class="card explain-group"><div class="card-title">' + ui.icon('info') + 'הסברים על הנעילה</div>';
+    html += '<details class="explain-sub"><summary>מה עושה מצב נעילה?</summary><ul class="feature-list">' +
       '<li>' + ui.icon('shield') + '<span><b>רק אוצריא פתוחה.</b> אם מישהו סוגר אותה — היא נפתחת מחדש מעצמה ונשארת בחזית.</span></li>' +
       '<li>' + ui.icon('computer') + '<span><b>שורת המשימות ותפריט התחל מוסתרים,</b> כך שאי אפשר לפתוח תוכנות אחרות.</span></li>' +
       '<li>' + ui.icon('key') + '<span><b>מקשי מעבר חסומים:</b> Win, ‏Alt+Tab, ‏Alt+F4, ‏Ctrl+Esc ומנהל המשימות.</span></li>' +
       '<li>' + ui.icon('lock') + '<span><b>יציאה רק עם סיסמה</b> — מכאן, מתוך התוסף. הנעילה חוזרת אוטומטית גם אחרי הפעלה מחדש.</span></li>' +
       '</ul></details>';
 
-    html += '<details class="card explain"><summary class="card-title">מה קורה בכיבוי, בהפעלה מחדש ובחשבון Windows אחר?</summary><ul class="feature-list">' +
+    html += '<details class="explain-sub"><summary>מה קורה בכיבוי, בהפעלה מחדש ובחשבון Windows אחר?</summary><ul class="feature-list">' +
       '<li>' + ui.icon('lock') + '<span><b>כיבוי או הפעלה מחדש:</b> כברירת מחדל הנעילה <b>נשמרת</b>. הגשר עולה עם Windows וננעל שוב, ואוצריא נפתחת. אם רוצים שבכיבוי הנעילה תתאפס, מסמנים "ביטול נעילה בכיבוי המחשב" בהגדרות הנעילה (לא פועל עם נעילה מוקשחת).</span></li>' +
       '<li>' + ui.icon('computer') + '<span><b>חשבון Windows אחר:</b> נעילה רגילה חלה רק בחשבון שבו הופעלה. מחשבון אחר אפשר לעצור את הגשר. <b>נעילה מוקשחת</b> (אופציונלית) מפעילה את הגשר גם בחשבונות אחרים וחוסמת בהם את מנהל המשימות.</span></li>' +
       '<li>' + ui.icon('shield') + '<span><b>הכי בטוח לעמדת לימוד:</b> חשבון Windows <b>רגיל</b> (בלי הרשאות מנהל) ללא גישה להגדרות המחשב, שבו מפעילים את הנעילה; חשבון המנהל נשאר עם סיסמה נפרדת.</span></li>' +
-      '<li>' + ui.icon('key') + '<span><b>חירום:</b> קיצור Ctrl+Alt+Shift+F12 פותח חלון קוד שחזור לביטול הנעילה כולה. בלי הקוד אי אפשר לבטל, כדי שלא יהיה קיצור שעוקף את הנעילה.</span></li>' +
-      '</ul></details>';
-    html += '<details class="card explain"><summary class="card-title">קיצור חירום לביטול הנעילה</summary><ul class="feature-list">' +
-      '<li>' + ui.icon('key') + '<span><b dir="ltr">Ctrl + Alt + Shift + F12</b> — פותח בכל רגע (גם בזמן נעילה) חלון להזנת קוד שחזור או קוד גיבוי חד-פעמי, ומבטל את הנעילה כולה.</span></li>' +
-      '<li>' + ui.icon('info') + '<span><b>במחשבים רבים (בעיקר ניידים) צריך ללחוץ גם על מקש Fn</b> — כלומר <b dir="ltr">Fn + Ctrl + Alt + Shift + F12</b> — כי מקשי F משמשים שם כמקשי מדיה (בהירות, עוצמת קול). אם הקיצור לא עובד, נסו עם Fn או כבו את "Fn Lock".</span></li>' +
-      '<li>' + ui.icon('lock') + '<span><b>בלי מקלדת תקינה:</b> 7 לחיצות מהירות על השעון בפינת המסך פותחות את אותו חלון.</span></li>' +
-      '<li>' + ui.icon('shield') + '<span>הקוד נמצא בדף השחזור שנשמר בעת הפעלת הנעילה. בלי הקוד אי אפשר לבטל, כדי שלא יהיה קיצור שעוקף את הנעילה.</span></li>' +
       '</ul></details>';
 
     if ((st.warnings || []).indexOf('admin') >= 0) {
-      html += '<div class="card"><div class="card-title">' + ui.icon('warning') + 'אזהרה: חשבון עם הרשאות מנהל</div>' +
+      html += '<div class="explain-warn"><b>' + ui.icon('warning') + 'אזהרה: חשבון עם הרשאות מנהל</b>' +
         '<p class="muted">המחשב מופעל בחשבון Windows עם הרשאות מנהל, שממנו אפשר לעקוף את הנעילה. ' +
         'מומלץ ליצור חשבון משתמש <b>רגיל (ללא הרשאות מנהל)</b> לעמדת הלימוד, ולהפעיל בו את הנעילה.</p></div>';
     }
 
+
     /* C6: מתקפל */
-    html += '<details class="card subtle explain"><summary class="card-title">זו נעילה "רכה" — להקשחה מלאה</summary>' +
+    html += '<details class="explain-sub"><summary>זו נעילה "רכה" — להקשחה מלאה</summary>' +
       '<p class="muted">הנעילה רצה בהרשאות המשתמש ומונעת שימוש מזדמן. מי שמבין במחשבים יכול לעקוף אותה. ' +
       'כדי שתעמוד גם מול ניסיון מכוון, השלימו שכבות שאינן תלויות בתוכנה:</p>' +
       '<ul class="feature-list">' +
@@ -166,6 +164,7 @@
       '<li>' + ui.icon('computer') + '<span><b>סינון תוכן על המחשב עצמו</b> (למשל נטפרי), ולא רק ברמת הרשת — כך מעבר לרשת אחרת אינו עוקף את הסינון.</span></li>' +
       '<li>' + ui.icon('lock') + '<span><b>Safe Mode:</b> במצב בטוח הגשר אינו עולה והנעילה אינה חלה. סיסמת BIOS שחוסמת את תפריט האתחול סוגרת גם את זה.</span></li>' +
       '</ul></details>';
+    html += '</div>';
 
     if (st.hasPassword && st.recoverySaved === false) {
       html += '<div class="card"><div class="card-title">' + ui.icon('key') + ' קוד השחזור עוד לא נשמר</div>' +
@@ -182,19 +181,26 @@
         '<p class="muted small">לפחות ' + MIN_PW + ' תווים. אחרי השמירה יוצג קוד שחזור חד-פעמי — חשוב לרשום אותו.</p>' +
         '</form></div>';
     } else {
+      /* #136: עיצוב כמו „הגדרות נעילה” — הסבר וקבוצות מתקפלות */
       html += '<div class="card"><div class="card-title">סיסמה והגדרות</div>' +
+        '<p class="muted">סיסמת המנהל, כלי ניהול, ותקציר ההגדרות הפעילות כעת.</p><div class="dlg-fields">' +
+        '<details class="field-group" open><summary><span>סיסמה וקודי שחזור</span><small>שינוי סיסמה וקודי גיבוי</small></summary><div class="field-group-body">' +
         '<div class="setting-row"><div class="setting-text"><b>שינוי סיסמה</b><span class="muted">החלפת סיסמת הנעילה (נדרשת הסיסמה הנוכחית)</span></div>' +
         '<button class="btn btn-tonal" data-act="chpw">' + ui.icon('edit') + 'שינוי</button></div>' +
         (backup ? '<div class="setting-row"><div class="setting-text"><b>קודי גיבוי לשחזור</b><span class="muted">' +
           (backup.left ? (window.I18N && I18N.isEn && I18N.isEn() ? backup.left + ' one-time codes left' : 'נשארו ' + backup.left + ' קודים חד-פעמיים') : 'עוד לא נוצרו') +
           ' · למקרה ששכחתם גם את הסיסמה וגם את קוד השחזור. כל קוד עובד פעם אחת</span></div>' +
           '<button class="btn btn-tonal" data-act="backup">' + ui.icon('key') + (backup.left ? 'יצירה מחדש' : 'יצירה') + '</button></div>' : '') +
+        '</div></details>' +
+        '<details class="field-group"><summary><span>כלי ניהול</span><small>פרופיל, יומן, ייצוא ויבוא, נעילת הסייר</small></summary><div class="field-group-body">' +
         '<div class="setting-row"><div class="setting-text"><b>פרופיל נעילה מוכן</b><span class="muted">תלמיד / בית מדרש / מנהל — מחיל סט הגדרות בלחיצה (אפשר לשנות אחר כך)</span></div>' +
         '<button class="btn btn-tonal" data-act="profile">' + ui.icon('lock') + 'בחירה</button></div>' +
         '<div class="setting-row"><div class="setting-text"><b>יומן פעולות מנהל</b><span class="muted">הפעלה וביטול נעילה, שינויי סיסמה והגדרות, יבוא וייצוא</span></div>' +
         '<button class="btn btn-tonal" data-act="adminlog">' + ui.icon('info') + 'הצגה</button></div>' +
         '<div class="setting-row"><div class="setting-text"><b>ייצוא ויבוא הגדרות</b><span class="muted">העברת הגדרות הנעילה, הסייר ושומר המסך למחשב אחר (בלי סיסמאות וקודים)</span></div>' +
         '<div class="btn-group"><button class="btn btn-tonal" data-act="export">ייצוא</button><button class="btn btn-tonal" data-act="import">יבוא</button></div></div>' +
+        '</div></details>' +
+        '<details class="field-group"><summary><span>מצב נוכחי</span><small>מה פתוח, תזמון, קבצים, שומר מסך</small></summary><div class="field-group-body">' +
         '<div class="setting-row"><div class="setting-text"><b>מה פתוח בזמן נעילה</b><span class="muted">' +
         ui.esc((st.openSections || []).map(function (id) { return SECTION_NAMES[id] || id; }).join(', ') || 'רק תוכנות לימוד ואודות') +
         (st.readOnly ? ' · קבצים לקריאה בלבד' : '') + (st.allowExcelDocs ? ' · Excel מותר בסייר' : '') + (st.clock !== false ? ' · שעון צף' : '') + '</span></div>' +
@@ -213,30 +219,27 @@
         ui.esc(st.zmanimCity || (st.zmanimLocation ? 'קואורדינטות מותאמות אישית' : 'לא הוגדר מיקום')) +
         (st.yahrzeitDay ? ' · יום השנה מוגדר' : '') + '</span></div>' +
         '<button class="btn btn-tonal" data-act="settings3">' + ui.icon('clock') + 'לטאב שומר מסך</button></div>' +
+        '<div class="setting-row"><div class="setting-text"><b>נעילת סייר הקבצים</b><span class="muted">' + fxSummary(fx) + '</span></div>' +
+        '<button class="btn btn-tonal" data-act="fx-manage">' + ui.icon('lock') + 'פתיחת „נעילת סייר הקבצים”</button></div>' +
         '<div class="setting-row"><div class="setting-text"><b>נתיב אוצריא</b><span class="muted path"><bdi dir="ltr">' + ui.esc(st.otzariaPath || 'זיהוי אוטומטי') + '</bdi></span></div></div>' +
-        '</div>';
+        '</div></details></div></div>';
       html += '<div class="card"><div class="card-title">הגדרות נעילה</div><div data-slot="kset">' + ui.loading('טוען הגדרות…') + '</div></div>';
       /* #60: הרשימה המלאה עברה לטאב "תוכנות תורניות" */
       html += '<div class="card"><div class="card-title">תוכנות מותרות לפתיחה</div><div class="setting-row"><div class="setting-text"><span class="muted">' + progs.length + ' תוכנות מותרות' + (st.autoTorah ? ' · זיהוי אוטומטי פעיל' : '') + '</span></div>' +
         '<button class="btn btn-tonal" data-act="prog-manage">' + ui.icon('computer') + 'ניהול בטאב „תוכנות לימוד”</button></div></div>';
-      html += fxCard();
-      html += hardCard(st.hard || {});
-      html += biosCard(bios);
-      html += pairCard(pairs || [], !!pairs);
-      html += '<div class="card subtle"><div class="card-title">שכחתם את הסיסמה?</div>' +
-        '<p class="muted">בחלון „ביטול נעילה” אפשר להקליד גם את <b>קוד השחזור</b> שקיבלתם בהגדרת הסיסמה. במקרה חירום אפשר להריץ משורת הפקודה:</p>' +
-        '<code class="cmd" dir="ltr">OtzariaBridge.exe --unlock &lt;קוד-שחזור&gt;</code>' +
-        '<p class="muted small">אפשרות נוספת: הפעלה ב-Safe Mode, שבו הגשר אינו עולה והנעילה אינה חלה.</p></div>';
+      /* #136.4: כרטיסי המידע (נעילה מוקשחת, BIOS, שכחתם סיסמה) בריבוע אחד */
+      html += '<div class="card info-group"><div class="card-title">' + ui.icon('shield') + 'חיבורים, הקשחה ושחזור</div>' +
+        infoSub(pairCard(pairs || [], !!pairs)) + infoSub(hardCard(st.hard || {})) + infoSub(biosCard(bios)) + '</div>';
     }
 
     body.innerHTML = html;
     if (!active && tu.active) startTempCountdown(body, tu.secondsLeft);
-    wire(body, st, progs, found);
+    wire(body, st, progs, found, backup);
     wireHard(body, st, pairs || []);
     wireBios(body, bios);
   }
 
-  function wire(body, st, progs, found) {
+  function wire(body, st, progs, found, backup) {
     var f = body.querySelector('[data-form=setpw]');
     if (f) {
       setTimeout(function () { var i = f.querySelector('input'); if (i) i.focus(); }, 50);
@@ -250,13 +253,13 @@
         var btn = f.querySelector('button[type=submit]');
         btn.disabled = true;
         try {
-          var r = await SS.bridge.call('/kiosk/set-password', { newPassword: pw });
+          var r = await bcall('/kiosk/set-password', { newPassword: pw });
           if (r && r.recoveryCode) await showRecovery(r.recoveryCode);
           else ui.toast('הסיסמה נשמרה', 'success');
           await wizardRest(pw);
           load(body);
         } catch (err) {
-          msg.textContent = ui.errText(err); msg.hidden = false; btn.disabled = false;
+          msg.textContent = friendlyErr(err); msg.hidden = false; btn.disabled = false;
         }
       });
     }
@@ -275,6 +278,13 @@
     editSettings(body, st); /* הגדרות הנעילה מוצגות ישירות בעמוד, לא מאחורי כפתור */
     on('settings3', function () { SS.show('screensaver'); });
     on('prog-manage', function () { SS.show('programs'); });
+    on('em-copy', function () {
+      SS.copyText(UNLOCK_CMD).then(function (ok) { ui.toast(ok ? 'הפקודה הועתקה. החליפו את <קוד-שחזור> בקוד האמיתי שלכם' : 'ההעתקה נכשלה', ok ? 'success' : 'error'); });
+    });
+    on('em-refresh', function () { ui.toast('מרענן את מצב ההקשחה…', 'success'); load(body); });
+    on('em-backup', function () { makeBackupCodes(body); });
+    on('em-chpw', function () { changePw(body); });
+    on('fx-manage', function () { SS.show('fxpolicy'); });
     on('prog-add', function () { addProgram(body, {}); });
     found.forEach(function (f, i) {
       on('prog-found-' + i, function () { addProgram(body, f); });
@@ -302,7 +312,8 @@
         '<p>רשמו אותו על דף ושמרו במקום בטוח, <b>לא ליד המחשב</b>. אם תשכחו את הסיסמה, אפשר לבטל את הנעילה עם הקוד הזה בחלון „ביטול נעילה”, או מחלון פקודה:</p>' +
         '<code class="cmd" dir="ltr">OtzariaBridge.exe --unlock ' + ui.esc(code) + '</code>' +
         '<p><b>חובה לשמור את הקוד לפני הפעלת הנעילה:</b></p><div class="row-actions full">' +
-        '<button type="button" class="btn btn-tonal" data-keep="file">' + ui.icon('download') + 'שמירה לקובץ</button>' +
+        '<select data-keep-drive aria-label="כונן חיצוני"><option value="">טוען כוננים חיצוניים…</option></select>' +
+        '<button type="button" class="btn btn-tonal" data-keep="file" disabled>' + ui.icon('download') + 'שמירה לכונן חיצוני</button>' +
         '<button type="button" class="btn btn-tonal" data-keep="print">' + ui.icon('edit') + 'הדפסה</button></div>',
       fields: [{ name: 'ack', type: 'checkbox', label: 'שמרתי/הדפסתי את הקוד והוא במקום בטוח' }],
       actions: [{ label: 'סיום', value: true, kind: 'primary' }],
@@ -313,13 +324,29 @@
         btn.disabled = true; cb.disabled = true;
         cb.addEventListener('change', function () { btn.disabled = !(cb.checked && kept); });
         /* סבב G (9): שמירה לקובץ או הדפסה — חובה לפני שאפשר לסיים (וגם לפני הפעלת נעילה, נאכף בגשר) */
+        var sel = form.querySelector('[data-keep-drive]');
+        var fileBtn = form.querySelector('[data-keep=file]');
+        /* שמירה לקובץ רק לכונן נשלף (אין עותק במחשב); הגשר מאמת שוב */
+        function loadDrives() {
+          bcall('/sys/usb/list').then(function (d) {
+            var drives = (d && d.drives) || [];
+            var cur = sel.value;
+            sel.innerHTML = drives.length
+              ? drives.map(function (x) { return '<option value="' + ui.esc(x.letter) + '\\">' + ui.esc(x.letter + ' ' + (x.label || x.model || 'כונן חיצוני')) + '</option>'; }).join('')
+              : '<option value="">לא נמצא כונן חיצוני — חברו כונן והמתינו רגע</option>';
+            if (cur) sel.value = cur;
+            fileBtn.disabled = !drives.length;
+          }, function () { sel.innerHTML = '<option value="">רשימת הכוננים לא זמינה</option>'; fileBtn.disabled = true; });
+        }
+        loadDrives();
+        var drvTimer = setInterval(function () { if (!form.isConnected) clearInterval(drvTimer); else loadDrives(); }, 4000);
         form.querySelectorAll('[data-keep]').forEach(function (kb) {
           kb.addEventListener('click', function () {
             var mode = kb.getAttribute('data-keep');
-            SS.bridge.call('/kiosk/recovery/keep', { code: code, mode: mode }).then(function (r) {
+            bcall('/kiosk/recovery/keep', { code: code, mode: mode, dir: mode === 'file' ? sel.value : undefined }).then(function (r) {
               kept = true; cb.disabled = false;
-              ui.toast(mode === 'print' ? 'נשלח להדפסה' : 'נשמר: ' + ((r && r.path) || 'מסמכים'), 'success');
-            }, function (err) { ui.toast(ui.errText(err), 'error'); });
+              ui.toast(mode === 'print' ? 'נשלח להדפסה' : 'נשמר: ' + ui.isolateLtr((r && r.path) || ''), 'success');
+            }, function (err) { ui.toast(friendlyErr(err), 'error'); });
           });
         });
         var copyBtn = form.querySelector('[data-copy-code]');
@@ -353,7 +380,7 @@
       title: 'לנעול את המחשב?', icon: 'warning', tone: v.strict ? 'danger' : '', body: summary,
       actions: [{ label: 'חזרה', value: false }, { label: 'נעל עכשיו', value: true, kind: v.strict ? 'danger' : 'primary' }],
       onSubmit: async function () {
-        await SS.bridge.call('/kiosk/enable', { password: v.pw, strict: !!v.strict, blockTaskManager: !!v.tm }, { timeoutMs: 30000 });
+        await bcall('/kiosk/enable', { password: v.pw, strict: !!v.strict, blockTaskManager: !!v.tm }, { timeoutMs: 30000 });
         return true;
       }
     });
@@ -369,7 +396,7 @@
       validate: function (x) { return x.pw ? '' : 'יש להקליד סיסמה'; },
       onSubmit: async function (x) {
         var pw = x.pw.trim();
-        await SS.bridge.call('/kiosk/disable', { password: /^[A-Za-z0-9]{4}(-[A-Za-z0-9]{4}){2}$/.test(pw) ? pw.replace(/-/g, '') : x.pw }, { timeoutMs: 30000 });
+        await bcall('/kiosk/disable', { password: /^[A-Za-z0-9]{4}(-[A-Za-z0-9]{4}){2}$/.test(pw) ? pw.replace(/-/g, '') : x.pw }, { timeoutMs: 30000 });
         return true;
       }
     });
@@ -412,7 +439,7 @@
       actions: [{ label: 'ביטול', value: false }, { label: 'פתיחה', value: true, kind: 'primary' }],
       validate: function (x) { return x.pw ? '' : 'יש להקליד את סיסמת הפתיחה הזמנית'; },
       onSubmit: async function (x) {
-        await SS.bridge.call('/kiosk/temp-unlock', { password: x.pw }, { timeoutMs: 30000 });
+        await bcall('/kiosk/temp-unlock', { password: x.pw }, { timeoutMs: 30000 });
         return true;
       }
     });
@@ -421,8 +448,8 @@
 
   async function tempEnd(body) {
     if (!(await ui.confirm('נעילה עכשיו', '<p>לסיים את הפתיחה הזמנית ולהחזיר את הנעילה מיד?</p>', 'נעילה עכשיו'))) return;
-    try { await SS.bridge.call('/kiosk/temp-unlock/end', {}, { timeoutMs: 30000 }); ui.toast('הנעילה הוחזרה', 'success'); }
-    catch (e) { ui.error(e); }
+    try { await bcall('/kiosk/temp-unlock/end', {}, { timeoutMs: 30000 }); ui.toast('הנעילה הוחזרה', 'success'); }
+    catch (e) { ui.toast(friendlyErr(e), 'error'); }
     load(body);
   }
 
@@ -442,7 +469,7 @@
         return '';
       },
       onSubmit: async function (x) {
-        var r = await SS.bridge.call('/kiosk/set-password', { oldPassword: x.old, newPassword: x.n1 });
+        var r = await bcall('/kiosk/set-password', { oldPassword: x.old, newPassword: x.n1 });
         return r || true;
       }
     });
@@ -469,7 +496,7 @@
       actions: [{ label: 'דילוג', value: false }, { label: 'החלה', value: true, kind: 'primary' }],
       onSubmit: async function (x) {
         var pr = PROFILES[x.prof]; if (!pr) return false;
-        await SS.bridge.call('/kiosk/settings', Object.assign({ password: pw }, pr.p));
+        await bcall('/kiosk/settings', Object.assign({ password: pw }, pr.p));
         return pr.label;
       }
     });
@@ -502,7 +529,7 @@
       validate: function (x) { return x.pw ? '' : 'יש להקליד את סיסמת הנעילה'; },
       onSubmit: async function (x) {
         var pr = PROFILES[x.prof]; if (!pr) return false;
-        await SS.bridge.call('/kiosk/settings', Object.assign({ password: x.pw }, pr.p));
+        await bcall('/kiosk/settings', Object.assign({ password: x.pw }, pr.p));
         return pr.label;
       }
     });
@@ -516,12 +543,12 @@
         '<p class="muted">יצירה מחדש מבטלת את הקודים הקודמים. קוד השחזור הראשי ממשיך לעבוד כרגיל.</p>',
       fields: [
         { name: 'pw', label: 'סיסמת נעילה או קוד שחזור', type: 'password', dir: 'ltr' },
-        { name: 'mode', type: 'select', label: 'מה לעשות עם הקודים', value: 'file',
-          options: [{ value: 'file', label: 'שמירה לקובץ במסמכים' }, { value: 'print', label: 'הדפסה (וגם שמירה לקובץ)' }] }
+        { name: 'mode', type: 'select', label: 'מה לעשות עם הקודים', value: 'none',
+          options: [{ value: 'none', label: 'הצגה במסך בלבד (מומלץ: לכתוב/להדפיס ולשמור הרחק מהמחשב)' }, { value: 'print', label: 'הדפסה (קובץ זמני שנמחק)' }] }
       ],
       actions: [{ label: 'ביטול', value: false }, { label: 'יצירה', value: true, kind: 'primary' }],
       validate: function (x) { return x.pw ? '' : 'יש להקליד סיסמה'; },
-      onSubmit: async function (x) { return await SS.bridge.call('/kiosk/recovery/backup', { password: x.pw, mode: x.mode }); }
+      onSubmit: async function (x) { return await bcall('/kiosk/recovery/backup', { password: x.pw, mode: x.mode }); }
     });
     if (!r || !r.codes) return;
     var list = r.codes.map(function (c, i) { return '<li><code dir="ltr">' + ui.esc(c) + '</code></li>'; }).join('');
@@ -541,7 +568,7 @@
       fields: [{ name: 'pw', label: 'סיסמת נעילה או קוד שחזור', type: 'password', dir: 'ltr' }],
       actions: [{ label: 'ביטול', value: false }, { label: 'הצגה', value: true, kind: 'primary' }],
       validate: function (x) { return x.pw ? '' : 'יש להקליד סיסמה'; },
-      onSubmit: async function (x) { return await SS.bridge.call('/admin-log', { password: x.pw }); }
+      onSubmit: async function (x) { return await bcall('/admin-log', { password: x.pw }); }
     });
     if (!r) return;
     var rows = (r.entries || []).map(function (e) { return '<tr><td dir="ltr">' + ui.esc(e.time) + '</td><td>' + ui.esc(e.action) + '</td></tr>'; }).join('');
@@ -555,7 +582,7 @@
       fields: [{ name: 'pw', label: 'סיסמת נעילה', type: 'password', dir: 'ltr' }],
       actions: [{ label: 'ביטול', value: false }, { label: 'ייצוא', value: true, kind: 'primary' }],
       validate: function (x) { return x.pw ? '' : 'יש להקליד סיסמה'; },
-      onSubmit: async function (x) { return await SS.bridge.call('/settings/export', { password: x.pw }); }
+      onSubmit: async function (x) { return await bcall('/settings/export', { password: x.pw }); }
     });
     if (r) ui.toast(r.file ? 'נשמר: ' + ui.isolateLtr(r.file) : 'הייצוא הצליח (' + r.count + ' הגדרות)', 'success');
   }
@@ -571,10 +598,123 @@
         var f = inp && inp.files && inp.files[0];
         if (!f) throw new Error('לא נבחר קובץ');
         var text = await f.text();
-        return await SS.bridge.call('/settings/import', { password: x.pw, text: text });
+        return await bcall('/settings/import', { password: x.pw, text: text });
       }
     });
     if (r) { ui.toast('יובאו ' + r.applied + ' הגדרות', 'success'); load(body); }
+  }
+
+  /* ---------- הודעות שגיאה ידידותיות: משפט פשוט + "מה לעשות", בלי מונחים טכניים ---------- */
+  /* הלוגיקה עברה ל-ui.errText (ui.js) כדי שכל הטאבים יציגו הודעות ידידותיות */
+  function friendlyErr(e) { return ui.errText(e); }
+  function softErr(e) {
+    if (!e || e.code === 'wrong_password' || e.code === 'locked' || e.code === 'too_many') return e;
+    var n = new Error(friendlyErr(e)); n.code = e.code || 'internal'; return n;
+  }
+  function bcall() { return SS.bridge.call.apply(SS.bridge, arguments).catch(function (e) { throw softErr(e); }); }
+  function errPanel(e, onRetry) {
+    return ui.errorBox({ code: 'unsupported', message: friendlyErr(e) }, onRetry);
+  }
+
+  /* ---------- לוח "בריאות ההקשחה" ----------
+     רמות: ok (תקין) / warn (שימו לב) / bad (דורש טיפול) / na (לא זמין). הרמה מוצגת גם באייקון וגם במילה, לא רק בצבע.
+     שדה שהגשר לא חושף (undefined) = "לא זמין" בעדינות, לא שגיאה. מקורות: ר' docs/ADMIN_UI.md */
+  var LV = { ok: ['check', 'תקין'], warn: ['warning', 'שימו לב'], bad: ['warning', 'דורש טיפול'], na: ['info', 'לא זמין'] };
+  function hrow(level, title, detail) { return { l: level, t: title, d: detail }; }
+  function healthRows(st, bios, backup) {
+    var h = st.hard || {}, tu = st.tempUnlock || {}, rows = [];
+    // 1. שירות ההקשחה
+    if (h.installed === undefined) rows.push(hrow('na', 'רכיב ההקשחה (שירות)', 'המידע אינו זמין בגרסת הגשר הזו.'));
+    else if (!h.installed) rows.push(hrow('warn', 'רכיב ההקשחה (שירות)', 'לא מותקן. הנעילה פועלת ברמה „רכה” בלבד. אפשר להתקין למטה בחלק „חיבורים, הקשחה ושחזור”.'));
+    else if (!h.running) rows.push(hrow('bad', 'רכיב ההקשחה (שירות)', 'מותקן אך לא רץ, ולכן הנעילה אינה מוקשחת. נסו „עדכון” או הפעלה מחדש של המחשב.'));
+    else if (h.needsUpdate) rows.push(hrow('warn', 'רכיב ההקשחה (שירות)', 'רץ, אך בגרסה ישנה מהגשר. מומלץ לעדכן.'));
+    else rows.push(hrow('ok', 'רכיב ההקשחה (שירות)', 'מותקן ורץ.'));
+    // 2. מצב הנעילה
+    var sch = st.schedule && st.schedule.enabled;
+    if (st.active) rows.push(hrow('ok', 'נעילה', 'פעילה' + (sch ? ' (בתזמון ' + st.schedule.start + '–' + st.schedule.end + ')' : '') + '.'));
+    else if (tu.active) rows.push(hrow('warn', 'נעילה', 'פתוחה זמנית וחוזרת אוטומטית.'));
+    else if (sch) rows.push(hrow('ok', 'נעילה', 'כבויה כרגע, תיכנס אוטומטית ב-' + st.schedule.start + '.'));
+    else rows.push(hrow('warn', 'נעילה', 'כבויה. המחשב פועל כרגיל עד שתפעילו נעילה.'));
+    // 3. בעיות אכיפה
+    var iss = h.enforcementIssues || st.enforcementIssues;
+    if (!Array.isArray(iss)) rows.push(hrow('na', 'אכיפת הנעילה', 'הגשר אינו מדווח כרגע על בעיות אכיפה.'));
+    else if (iss.length) rows.push(hrow('bad', 'אכיפת הנעילה', 'חסימות שלא הוחלו כראוי (' + iss.length + '). הפעלה מחדש של המחשב או „עדכון” של רכיב ההקשחה בדרך כלל פותרים.'));
+    else rows.push(hrow('ok', 'אכיפת הנעילה', 'כל החסימות הוחלו ואומתו.'));
+    // 4. קובץ הגדרות וחתימה
+    var corrupt = h.stateCorrupt !== undefined ? h.stateCorrupt : st.stateCorrupt;
+    var seal = h.configSealOk !== undefined ? h.configSealOk : st.configSealOk;
+    if (corrupt === true) rows.push(hrow('bad', 'קובץ ההגדרות', 'נראה פגום, והנעילה עלולה לחזור להגדרות מחמירות. עיינו ב„מרכז החירום”.'));
+    else if (seal === false) rows.push(hrow('bad', 'קובץ ההגדרות', 'חתימת ההגדרות אינה תקינה (ייתכן ששונה ידנית). שמירה מחדש של הגדרות הנעילה תתקן.'));
+    else if (corrupt === false && seal === true) rows.push(hrow('ok', 'קובץ ההגדרות', 'תקין וחתום.'));
+    else if (corrupt === false) rows.push(hrow('ok', 'קובץ ההגדרות', 'תקין. מצב החתימה אינו זמין.'));
+    else rows.push(hrow('na', 'קובץ ההגדרות', 'מצב הקובץ והחתימה אינו נחשף כרגע.'));
+    // 5. קוד שחזור וקודי גיבוי
+    var hasRec = h.hasRecovery !== undefined ? h.hasRecovery : (st.recoverySaved === undefined ? undefined : !!st.recoverySaved);
+    if (!st.hasPassword) rows.push(hrow('warn', 'קוד שחזור', 'עוד לא הוגדרה סיסמה, ולכן אין קוד שחזור.'));
+    else if (hasRec === false) rows.push(hrow('bad', 'קוד שחזור', 'לא נשמר. בלעדיו אי אפשר לבטל נעילה בחירום. צרו קוד חדש דרך „שינוי סיסמה”.'));
+    else if (hasRec === true) rows.push(hrow('ok', 'קוד שחזור', 'מוגדר ונשמר.'));
+    else rows.push(hrow('na', 'קוד שחזור', 'אינו זמין.'));
+    var left = backup ? backup.left : h.backupLeft;
+    if (left === undefined || left === null) rows.push(hrow('na', 'קודי גיבוי', 'מספר הקודים שנותרו אינו זמין.'));
+    else if (left <= 0) rows.push(hrow('warn', 'קודי גיבוי', 'לא נותרו קודים חד-פעמיים. מומלץ ליצור סט חדש.'));
+    else if (left <= 2) rows.push(hrow('warn', 'קודי גיבוי', 'נותרו מעט קודים חד-פעמיים (' + left + '). כדאי ליצור סט חדש.'));
+    else rows.push(hrow('ok', 'קודי גיבוי', 'נותרו קודים חד-פעמיים (' + left + ').'));
+    // 6. הקשחת אתחול (Safe Mode / WinRE)
+    var boot = bios && bios.boot, en = boot && boot.enforcement;
+    if (!boot || boot.error) rows.push(hrow('na', 'הקשחת אתחול (Safe Mode / WinRE)', 'המידע אינו זמין כרגע.'));
+    else if (en && en.incomplete) rows.push(hrow('bad', 'הקשחת אתחול (Safe Mode / WinRE)', 'לא הושלמה. ייתכן שעדיין אפשר להיכנס ל-Safe Mode או לתפריט ההתאוששות.'));
+    else if (en && en.active) rows.push(hrow('ok', 'הקשחת אתחול (Safe Mode / WinRE)', 'פעילה: כניסה ל-Safe Mode ולתפריט ההתאוששות חסומה.'));
+    else if (en) rows.push(hrow('warn', 'הקשחת אתחול (Safe Mode / WinRE)', 'כבויה. אפשר לעקוף נעילה דרך Safe Mode. היא נדלקת עם התקנת רכיב ההקשחה.'));
+    else rows.push(hrow('na', 'הקשחת אתחול (Safe Mode / WinRE)', 'לא דווח מצב אכיפה.'));
+    // 7. עדכון (health.ok / rollback)
+    var up = h.updateHealth || st.updateHealth;
+    if (up === undefined) rows.push(hrow('na', 'תקינות עדכון אחרון', 'הגשר אינו חושף כרגע את תוצאת בדיקת התקינות אחרי עדכון.'));
+    else if (up && (up.rollback || up.state === 'rollback')) rows.push(hrow('bad', 'תקינות עדכון אחרון', 'העדכון האחרון נכשל והוחזרה הגרסה הקודמת.'));
+    else if (up && (up.ok || up.state === 'healthy')) rows.push(hrow('ok', 'תקינות עדכון אחרון', 'הגרסה החדשה אומתה כתקינה.'));
+    else rows.push(hrow('warn', 'תקינות עדכון אחרון', 'ממתין לאישור תקינות אחרי עדכון.'));
+    // 8. גרסה
+    var ver = h.version || (SS.bridge.health && SS.bridge.health.version);
+    rows.push(ver ? hrow('ok', 'גרסת הגשר', 'גרסה ' + ver) : hrow('na', 'גרסת הגשר', 'אינה זמינה.'));
+    return rows;
+  }
+  function healthPanel(st, bios, backup) {
+    var rows = healthRows(st, bios, backup), worst = 'ok';
+    rows.forEach(function (r) { if (r.l === 'bad') worst = 'bad'; else if (r.l === 'warn' && worst !== 'bad') worst = 'warn'; });
+    var bad = rows.filter(function (r) { return r.l === 'bad'; }).length, warn = rows.filter(function (r) { return r.l === 'warn'; }).length;
+    var head = worst === 'bad' ? 'יש דברים שדורשים טיפול (' + bad + ')' : worst === 'warn' ? 'הכול עובד, ויש דברים שכדאי לשפר (' + warn + ')' : 'הכול תקין';
+    var h = '<section class="card health-panel" aria-labelledby="health-title"><div class="health-head ' + worst + '">' +
+      '<span class="health-big">' + ui.icon(LV[worst][0]) + '</span><div><h3 id="health-title">בריאות ההקשחה</h3><p><b>' + head + '</b></p></div></div>' +
+      '<ul class="health-list">';
+    rows.forEach(function (r) {
+      h += '<li class="health-row ' + r.l + '"><span class="health-ic">' + ui.icon(LV[r.l][0]) + '</span>' +
+        '<span class="health-text"><b>' + ui.esc(r.t) + '</b><span class="muted">' + ui.esc(r.d) + '</span></span>' +
+        '<span class="health-badge">' + LV[r.l][1] + '</span></li>';
+    });
+    return h + '</ul></section>';
+  }
+
+  /* ---------- מרכז חירום: הסבר וצעדים בלבד. אין כאן קודים או סיסמאות; הכפתורים בטוחים (העתקה/רענון/פעולה שדורשת סיסמה) ---------- */
+  var UNLOCK_CMD = 'OtzariaBridge.exe --unlock <קוד-שחזור>';
+  function emergencyCenter(st, backup) {
+    return '<section class="card emergency" aria-labelledby="em-title"><div class="card-title" id="em-title">' + ui.icon('key') + 'מרכז חירום: שכחתם סיסמה או נתקעתם?</div>' +
+      '<p class="muted">אל תיבהלו. יש כמה דרכים לשחרר את הנעילה, מהקלה לקשה. תצטרכו את <b>קוד השחזור</b> שנשמר (בקובץ או בהדפסה) בעת הפעלת הנעילה.</p>' +
+      '<ol class="steps em-steps">' +
+      '<li><b>קוד שחזור בחלון הביטול.</b> ב„ביטול נעילה” אפשר להקליד את קוד השחזור (או קוד גיבוי חד-פעמי) במקום הסיסמה.</li>' +
+      '<li><b>קיצור חירום במקלדת:</b> <b dir="ltr">Ctrl + Alt + Shift + F12</b> פותח בכל רגע, גם בזמן נעילה, חלון להזנת הקוד. במחשבים ניידים לרוב צריך גם <b dir="ltr">Fn</b>, או לכבות „Fn Lock”.</li>' +
+      '<li><b>בלי מקלדת תקינה:</b> 7 לחיצות מהירות על השעון בפינת המסך פותחות את אותו חלון.</li>' +
+      '<li><b>שורת פקודה:</b> הריצו <code class="cmd" dir="ltr">' + ui.esc(UNLOCK_CMD) + '</code> והחליפו את הסוגריים בקוד שלכם.</li>' +
+      '<li><b>מוצא אחרון:</b> אתחול ב-Safe Mode, שבו הגשר אינו עולה. אם הוגדרה סיסמת BIOS והקשחת אתחול, דרך זו חסומה בכוונה.</li></ol>' +
+      '<p class="muted small">הקוד אינו מוצג כאן מטעמי אבטחה. אם איבדתם גם אותו וגם את קודי הגיבוי, אי אפשר לבטל. זה מכוון, כדי שלא יהיה מנגנון עקיפה.</p>' +
+      '<div class="row-actions full">' +
+      '<button class="btn btn-tonal" data-act="em-copy">' + ui.icon('copy') + 'העתקת פקודת השחזור</button>' +
+      '<button class="btn btn-tonal" data-act="em-refresh">' + ui.icon('refresh') + 'רענון מצב ההקשחה</button>' +
+      (st.hasPassword ? '<button class="btn btn-tonal" data-act="em-backup">' + ui.icon('key') + (backup && backup.left ? 'יצירת קודי גיבוי חדשים' : 'יצירת קודי גיבוי') + '</button>' : '') +
+      '</div></section>';
+  }
+  function fxSummary(fx) {
+    if (!fx || !fx.effective) return 'המצב אינו זמין כרגע. אפשר לפתוח את הטאב ולבדוק שם.';
+    var m = { open: 'פתוח — הסייר ללא הגבלה', restricted: 'מוגבל לתיקיות שנבחרו', locked: 'נעול עד הזנת סיסמת מנהל' };
+    return (m[fx.effective] || 'מצב לא ידוע') + '. לשינוי פתחו את הטאב.';
   }
 
   /* ---------- נעילה מוקשחת (3.0.0, בעיה #1) ---------- */
@@ -795,7 +935,7 @@
         return x.pw ? '' : 'יש להקליד את סיסמת הנעילה';
       },
       onSubmit: async function (x) {
-        return await SS.bridge.call('/bios/harden', {
+        return await bcall('/bios/harden', {
           password: x.pw, setPassword: !!x.setPw, biosPassword: x.biosPw || '', blockUsbBoot: !!x.blockUsb, lockBootMenu: !!x.lockBootMenu
         }, { timeoutMs: 30000 });
       }
@@ -828,7 +968,7 @@
         fields: [{ name: 'pw', label: 'סיסמת נעילה', type: 'password', dir: 'ltr' }],
         actions: [{ label: 'ביטול', value: false }, { label: h.installed ? 'עדכון' : 'התקנה', value: true, kind: 'primary' }],
         validate: function (x) { return x.pw ? '' : 'יש להקליד את סיסמת הנעילה'; },
-        onSubmit: async function (x) { await SS.bridge.call('/kiosk/hard/install', { password: x.pw }, { timeoutMs: 200000 }); return true; }
+        onSubmit: async function (x) { await bcall('/kiosk/hard/install', { password: x.pw }, { timeoutMs: 200000 }); return true; }
       });
       if (ok) { ui.toast('רכיב ההקשחה מותקן', 'success'); load(body); }
     });
@@ -841,7 +981,7 @@
         ],
         actions: [{ label: 'ביטול', value: false }, { label: 'שמירה', value: true, kind: 'primary' }],
         validate: function (x) { return x.pw ? '' : 'יש להקליד את סיסמת הנעילה'; },
-        onSubmit: async function (x) { await SS.bridge.call('/kiosk/hard/settings', { password: x.pw, blockUsbStorage: !!x.usb }); return true; }
+        onSubmit: async function (x) { await bcall('/kiosk/hard/settings', { password: x.pw, blockUsbStorage: !!x.usb }); return true; }
       });
       if (ok) { ui.toast('ההגדרות נשמרו', 'success'); load(body); }
     });
@@ -852,7 +992,7 @@
         fields: [{ name: 'pw', label: 'סיסמת נעילה או קוד שחזור', type: 'password', dir: 'ltr' }],
         actions: [{ label: 'ביטול', value: false }, { label: 'הסרה', value: true, kind: 'danger' }],
         validate: function (x) { return x.pw ? '' : 'יש להקליד סיסמה'; },
-        onSubmit: async function (x) { await SS.bridge.call('/kiosk/hard/uninstall', { password: x.pw }); return true; }
+        onSubmit: async function (x) { await bcall('/kiosk/hard/uninstall', { password: x.pw }); return true; }
       });
       if (ok) { ui.toast('רכיב ההקשחה הוסר', 'success'); load(body); }
     });
@@ -867,15 +1007,15 @@
           });
           if (!ok) return;
         } else if (!(await ui.confirm('ניתוק תוסף', 'בפתיחה הבאה התוסף יבקש אישור מחדש.', 'ניתוק'))) return;
-        try { await SS.bridge.call('/pair/revoke', { id: c.id, password: x.pw }); load(body); }
-        catch (e) { ui.error(e); }
+        try { await bcall('/pair/revoke', { id: c.id, password: x.pw }); load(body); }
+        catch (e) { ui.toast(friendlyErr(e), 'error'); }
       });
     });
   }
 
   var SECTION_NAMES = {
     audio: 'שמע', display: 'מסך', energy: 'חשמל וסוללה', keyboard: 'מקלדת', mouse: 'עכבר ומשטח מגע',
-    printer: 'מדפסות', time: 'שעה ותאריך', wifi: 'רשת אלחוטית', bluetooth: 'בלוטות׳', airplane: 'מצב טיסה', usb: 'התקני USB'
+    printer: 'מדפסות', time: 'שעה ותאריך', wifi: 'רשת אלחוטית', bluetooth: 'בלוטות׳', airplane: 'מצב טיסה', usb: 'התקני USB', power: 'הפעלה מחדש וכיבוי'
   };
 
   /* זמנים ידועים שאפשר להציג בשומר המסך (ת"ז מתאימות ל-bridge/Zmanim.cs KnownZmanim).
@@ -916,7 +1056,7 @@
       { name: 'rest', type: 'checkbox', label: 'מסך מנוחה כשאוצריא ממוזערת', value: st.restScreen !== false, hint: 'סמל אוצריא, שעה ותאריך במסך מלא. לחיצה בכל מקום מחזירה לאוצריא' },
       { name: 'saverOn', type: 'checkbox', label: 'שומר מסך', value: st.saverEnabled !== false, hint: 'מתג ראשי. כשהוא כבוי שומר המסך לא מופיע בכלל: לא בנעילה ולא בלעדיה. מסך המנוחה כשאוצריא ממוזערת נשלט בנפרד' },
       { name: 'idle', label: 'שומר מסך אחרי דקות ללא פעילות (ברירת מחדל: 1)', value: String(st.restIdleMinutes || 0), dir: 'ltr', placeholder: '0', hint: 'מסך המנוחה מופיע גם כשאוצריא פתוחה, אחרי הזמן הזה בלי מקלדת ועכבר. עד 240 דקות' },
-      { name: 'saverUnl', type: 'checkbox', label: 'שומר מסך גם כשהנעילה כבויה', value: st.saverWhenUnlocked !== false, hint: 'אחרי זמן ההמתנה שלמעלה, גם בלי מצב נעילה. לחיצה או מקש חוזרים לחלון הקודם' },
+      { name: 'saverUnl', type: 'checkbox', label: 'שומר מסך גם כשהנעילה כבויה', value: st.saverWhenUnlocked === true, hint: 'אחרי זמן ההמתנה שלמעלה, גם בלי מצב נעילה. לחיצה או מקש חוזרים לחלון הקודם' },
       { name: 'bootCover', type: 'checkbox', label: 'מסך מנוחה מיד בהדלקת המחשב (בנעילה), עד שאוצריא עולה', value: st.bootCover !== false, hint: 'נסגר לבד כשאוצריא מוכנה, או אחרי דקה. לחיצה סוגרת אותו מיד' }
     ];
     if (cityOptions.length > 1) {
@@ -967,7 +1107,7 @@
     fields.push({ name: 'lockImg', type: 'checkbox', label: 'להציג גם במסך הנעילה של Windows', value: !!st.lockScreenImage,
       hint: 'תמונת מסך הנעילה של המחשב תהיה כמו שומר המסך (פסוק, סמל, זמני היום, הקדשה), ומתעדכנת כל חצי שעה. "זרקור Windows" (תמונות מתחלפות של מיקרוסופט) מכובה אוטומטית' });
     fields.push({ name: 'dedText', type: 'textarea', rows: 3, label: 'נוסח ההקדשה בשומר המסך', value: st.restDedicationText || '',
-      placeholder: 'ריק = ההקדשה הקבועה. שורה ראשונה קטנה, שורה שנייה מודגשת (שם), השאר קטן',
+      placeholder: 'ריק = בלי הקדשה. שורה ראשונה קטנה, שורה שנייה מודגשת (שם), השאר קטן',
       hint: 'אפשר לכתוב הקדשה אחרת או לעילוי נשמת יקיריכם. עד 4 שורות' });
     /* d992415 (יאיר) — "גם וגם": סגנון ההקדשה ונר מרצד לבחירת המשתמש. ברירת מחדל לפי 15.10: קבועה, בלי תזוזה */
     fields.push({ name: 'dedStyle', type: 'select', label: 'סגנון ההקדשה', value: st.restDedicationStyle || 'fixed',
@@ -1015,6 +1155,7 @@
     fields.push({ name: 'side', type: 'checkbox', label: 'סרגל תוכנות בצד המסך', value: st.sideBar !== false, hint: 'פס צר בשולי המסך שמתרחב כשמתקרבים אליו: אוצריא והתוכנות התורניות המותרות, עם סימון מה פתוח. לחיצה מעבירה לחזית, או פותחת אם סגורה' });
     fields.push({ name: 'barProgs', type: 'checkbox', label: 'תוכנות מותרות בשורת המשימות של הנעילה', value: st.barPrograms != null ? !!st.barPrograms : st.sideBar === false, hint: 'כשנבחרה "שורת משימות" בשדה "שעון / שורת משימות": סמלי התוכנות מוצגים בשורה, ליד השם "אחת שאלתי" (במקום או בנוסף לסרגל הצד)' });
     fields.push({ name: 'sideIcons', type: 'checkbox', label: 'סרגל התוכנות: אייקונים בלבד', value: !!st.sideBarIconsOnly, hint: 'סרגל צר יותר, בלי שמות. כבוי (ברירת מחדל): אייקון ולידו שם התוכנה' });
+    fields.push({ name: 'sideKb', type: 'checkbox', label: 'סרגל התוכנות: מקלדת וירטואלית', value: !!st.sideBarKeyboard, hint: 'למסך מגע בלי מקלדת: מוסיף לסרגל כפתור שפותח את המקלדת שעל המסך של Windows, והיא מותרת בזמן הנעילה' });
     fields.push({ name: 'sidePos', type: 'select', label: 'מיקום סרגל התוכנות', value: st.sideBarPosition || 'right', hint: 'לאיזה צד מסך הסרגל מוצמד', options: [{ value: 'right', label: 'ימין' }, { value: 'left', label: 'שמאל' }, { value: 'top', label: 'למעלה' }, { value: 'bottom', label: 'למטה' }] });
     fields.push({ name: 'reset', type: 'checkbox', label: 'ביטול נעילה בכיבוי המחשב', value: !!st.resetOnShutdown, hint: 'כבוי (ברירת מחדל): הנעילה נשמרת וחוזרת אחרי הפעלה מחדש. מסומן: בכיבוי או התנתקות הנעילה מתבטלת והמחשב עולה רגיל. לא פועל עם נעילה מוקשחת' });
     fields.push({ name: 'fs', type: 'checkbox', label: 'אוצריא במסך מלא', value: st.fullscreenOtzaria !== false, hint: 'בלי כותרת ומסגרת חלון' });
@@ -1205,9 +1346,9 @@
         if (x.sched && !SEDARIM.some(function (s) { return s.start === x.schedStart && s.end === x.schedEnd; })) {
           try { var mine = JSON.parse(localStorage.getItem('ss.sedarim') || '[]') || []; mine.push({ label: 'שמור', start: x.schedStart, end: x.schedEnd }); localStorage.setItem('ss.sedarim', JSON.stringify(mine.slice(-6))); } catch (e) { /* כלום */ }
         }
-        await SS.bridge.call('/kiosk/settings', {
+        await bcall('/kiosk/settings', {
           password: x.pw, allowOpenExtensions: parseExt(x.ext), otzariaPath: x.path.trim(),
-          readOnly: !!x.ro, twoFactor: !!x.tfa, clock: !!x.clock, venueName: (x.venue || '').trim(), fullscreenOtzaria: !!x.fs, sideBar: !!x.side, barPrograms: !!x.barProgs, sideBarIconsOnly: !!x.sideIcons, sideBarPosition: x.sidePos, resetOnShutdown: !!x.reset, clockPosition: x.pos,
+          readOnly: !!x.ro, twoFactor: !!x.tfa, clock: !!x.clock, venueName: (x.venue || '').trim(), fullscreenOtzaria: !!x.fs, sideBar: !!x.side, barPrograms: !!x.barProgs, sideBarIconsOnly: !!x.sideIcons, sideBarKeyboard: !!x.sideKb, sideBarPosition: x.sidePos, resetOnShutdown: !!x.reset, clockPosition: x.pos,
           openSections: all.filter(function (id) { return x['sec_' + id]; }),
           schedule: { enabled: !!x.sched, start: x.schedStart, end: x.schedEnd, warn: !!x.schedWarn, extra: parseExtraSched(x.schedExtra) || [], days: parseDays(x.schedDays) || [], showInCalendar: !!x.schedCalendar },
           tempUnlockEnabled: !!x.tu, tempUnlockMinutes: +String(x.tuMin).trim() || 30, tempUnlockPassword: x.tuPw || ''
@@ -1218,10 +1359,10 @@
     if (ok) { ui.toast('ההגדרות נשמרו', 'success'); if (SS.pushZmanimNow) SS.pushZmanimNow(); if (SS.pushLockCalendar) SS.pushLockCalendar(); load(body); }
   }
 
-  /* מדיניות סייר הקבצים נערכת בתוסף "סייר קבצים" עצמו; כאן רק מפנים אליה */
-  function fxCard() {
-    return '<div class="card subtle"><div class="card-title">נעילה והגבלה של סייר הקבצים</div>' +
-      '<p class="muted">אפשר לנעול את סייר הקבצים בסיסמת המנהל, או להגביל אותו לתיקיות מסוימות (למשל שולחן העבודה). ההגדרה נמצאת בתוסף „סייר קבצים”: הגדרות ← נעילה והגבלה, ונאכפת בגשר.</p></div>';
+  /* #136.4: כרטיס עצמאי -> תת-חלק בתוך ריבוע המידע המשותף */
+  function infoSub(h) {
+    if (!h) return '';
+    return h.replace(/class="card( subtle)?"/g, 'class="info-sub"').replace(/class="card-title"/g, 'class="info-sub-title"');
   }
 
   document.addEventListener('input', function (e) {
@@ -1261,9 +1402,9 @@
 
   async function openProgram(p) {
     try {
-      await SS.bridge.call('/kiosk/programs/launch', { id: p.id }, { timeoutMs: 30000 });
+      await bcall('/kiosk/programs/launch', { id: p.id }, { timeoutMs: 30000 });
       ui.toast('התוכנה נפתחת…', 'success');
-    } catch (err) { ui.toast(ui.errText(err), 'error'); }
+    } catch (err) { ui.toast(friendlyErr(err), 'error'); }
   }
 
   async function addProgram(body, preset, reload) {
@@ -1283,7 +1424,7 @@
         return x.pw ? '' : 'יש להקליד את סיסמת הנעילה';
       },
       onSubmit: async function (x) {
-        await SS.bridge.call('/kiosk/programs/add', { password: x.pw, name: x.name.trim(), path: x.path.trim(), procs: (x.procs || '').trim() });
+        await bcall('/kiosk/programs/add', { password: x.pw, name: x.name.trim(), path: x.path.trim(), procs: (x.procs || '').trim() });
         return true;
       }
     });
@@ -1303,7 +1444,7 @@
       actions: [{ label: 'ביטול', value: false }, { label: current ? 'כיבוי הזיהוי' : 'הדלקה', value: true, kind: 'primary' }],
       validate: function (x) { return x.pw ? '' : 'יש להקליד את סיסמת הנעילה'; },
       onSubmit: async function (x) {
-        await SS.bridge.call('/kiosk/programs/auto', { password: x.pw, enabled: !current }, { timeoutMs: 30000 });
+        await bcall('/kiosk/programs/auto', { password: x.pw, enabled: !current }, { timeoutMs: 30000 });
         return true;
       }
     });
@@ -1318,7 +1459,7 @@
       actions: [{ label: 'ביטול', value: false }, { label: 'הסרה', value: true, kind: 'primary' }],
       validate: function (x) { return x.pw ? '' : 'יש להקליד את סיסמת הנעילה'; },
       onSubmit: async function (x) {
-        await SS.bridge.call('/kiosk/programs/remove', { password: x.pw, id: p.id });
+        await bcall('/kiosk/programs/remove', { password: x.pw, id: p.id });
         return true;
       }
     });

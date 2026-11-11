@@ -60,6 +60,7 @@ public static class Server
         OfflineMode.Register();
         DeviceApi.Register();
         MoreApi.Register();
+        CursorApi.Register();
         BiosHardening.Register();
         Kiosk.Register();
         PackG.Register();
@@ -75,6 +76,8 @@ public static class Server
         CompassApi.Register();  // כיוון תפילה: כיוון הצפון
         PdfAssoc.Register();    // שלב ד: "פתח באמצעות" לתוסף + תור פתיחה
         LocationApi.Register(); // מיקום מ-Windows ו-/feedback (כיוון תפילה 2.6)
+        MailApi.Register();     // ענף mail-plugin: דואר (IMAP, קריאה בלבד)
+        LocationAddress.Register(); // #105: כתובת לפי מיקום (MapLocationFinder, ניסיון בלבד)
 
         int port = FindPort();
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { ContentRootPath = AppContext.BaseDirectory });
@@ -144,6 +147,7 @@ public static class Server
                     platform = "windows",
                     auth = "token",
                     paired = Pairing.IsValid(req.Headers[Pairing.TokenHeader].ToString()),
+                    proofs = Pairing.Proofs(req.Headers["X-Otzaria-Challenge"].ToString()), // אתגר-תגובה נגד גשר מזויף (ר' Pairing.Proofs)
                 });
                 return;
             }

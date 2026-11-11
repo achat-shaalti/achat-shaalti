@@ -18,7 +18,7 @@
 
   /* ---------- צימוד לגשר (3.0.0, בעיה #2): מפתח אקראי שהגשר נותן אחרי אישור המשתמש ---------- */
   var TOKEN_KEY = 'bridgeToken';
-  var token = null, tokenLoaded = false, pairing = null;
+  var token = null, tokenLoaded = false, pairing = null, pairFail = null;
   async function hostCall(method, params) {
     var r = await window.Otzaria.call(method, params || {});
     if (r && r.success === false) throw new Error((r.error && r.error.message) || method);
@@ -90,13 +90,17 @@
     /* בקשת צימוד: הגשר מציג חלון אישור במחשב (עד 2 דקות) */
     async pair() {
       if (pairing) return pairing;
+      /* 04.11: אחרי צימוד שנכשל לא שולחים בקשה חדשה מכל קריאה (הציף "בקשות צימוד תכופות מדי") — 30 שניות המתנה */
+      if (pairFail && Date.now() - pairFail.at < 30000) throw pairFail.err;
       pairing = (async function () {
         var r = await rawRequest("http://127.0.0.1:" + real.port + "/pair/request", "POST",
           { client: 'system-settings', name: 'הגדרות מערכת' }, 120000);
         if (!r.json.ok) { var er = r.json.error || {}; throw BridgeError(er.code || 'forbidden', er.message || '', r.status); }
         await saveToken(r.json.data.token);
       })();
-      try { await pairing; } finally { pairing = null; }
+      try { await pairing; pairFail = null; }
+      catch (e) { if (e && typeof e === 'object') e.expected = true; pairFail = { at: Date.now(), err: e }; throw e; }
+      finally { pairing = null; }
     },
     async call(path, body, opts) {
       if (!real.port) throw BridgeError('offline', 'bridge not connected');
@@ -110,6 +114,8 @@
         if (first) SS.bridge.onPairing && SS.bridge.onPairing(true);
         try { await real.pair(); } finally { if (first) SS.bridge.onPairing && SS.bridge.onPairing(false); }
         res = await real.callOnce(path, body, opts);
+        /* אחרי אישור מוצלח הגשר עדיין דוחה: לא פותחים חלון אישור נוסף (מונע לולאת "אשר שוב ושוב") */
+        if (res.unpaired) throw BridgeError('pair_failed', 'החיבור אושר אבל הגשר לא קיבל אותו. יש לסגור ולפתוח מחדש את אחת שאלתי ולנסות שוב', 401);
       }
       if (res.error) throw res.error;
       return res.data;
@@ -170,14 +176,14 @@
       allowOpenExtensions: ['pdf', 'txt'], warnings: [], readOnly: false, allowExcelDocs: false, twoFactor: false, twoFactorAvailable: true, clock: true, clockPosition: 'bottom-left', venueName: '', dedicationText: '',
       restScreen: true, restIdleMinutes: 0, zmanimLocation: '', zmanimCity: '', zmanimShow: [], zmanimDiaspora: false,
       candleLightingMinutes: 18, zmanimElevation: 0, zmanimFallbackEngine: 'noaa', showParsha: true, showDafYomi: true, yahrzeitMonth: '', yahrzeitDay: 0, yahrzeitLabel: '', fullscreenOtzaria: true,
-      sideBar: true, sideBarIconsOnly: false, sideBarPosition: 'right', restZmanimSide: 'right', resetOnShutdown: false,
+      sideBar: true, sideBarIconsOnly: false, sideBarKeyboard: false, sideBarPosition: 'right', restZmanimSide: 'right', resetOnShutdown: false,
       activatedBy: 'manual',
       /* פתיחה זמנית (תואם ל-Kiosk.TempUnlockStatus בגשר); active/secondsLeft/until מחושבים ב-/kiosk/status */
       tempUnlock: { enabled: false, configured: false, minutes: 30, maxMinutes: 60, twoFactorOn: false, usable: false,
         active: false, secondsLeft: 0, until: '', service: false, serviceOutdated: false },
       schedule: { enabled: false, start: '20:00', end: '02:00', warn: true },
       openSections: ['audio', 'display', 'energy', 'keyboard', 'mouse', 'printer'],
-      allSections: ['audio', 'display', 'energy', 'keyboard', 'mouse', 'printer', 'time', 'wifi', 'bluetooth', 'airplane', 'usb']
+      allSections: ['audio', 'display', 'energy', 'keyboard', 'mouse', 'printer', 'time', 'wifi', 'bluetooth', 'airplane', 'usb', 'power']
     },
     programs: [],
     autoTorah: false,
@@ -282,7 +288,7 @@
       return { ok: true };
     },
     '/sys/power': function (b) {
-      if (M.kiosk.active && b.action !== 'lock') throw mockErr('locked', 'הפעולה חסומה במצב נעילה');
+      if (M.kiosk.active && (b.action === 'restart' || b.action === 'shutdown' || b.action === 'signout') && !b.password) throw mockErr('wrong_password', 'הסיסמה שגויה');
       return { ok: true };
     },
     '/kiosk/status': function () { tempSync(); return Object.assign(clone(M.kiosk), { hard: clone(M.hard) }); },
@@ -326,7 +332,7 @@
       for (var i = 0; i < 10; i++) { var c = ''; for (var j = 0; j < 12; j++) c += A.charAt(Math.floor(Math.random() * A.length)); M.backup.push(c.replace(/(.{4})(?=.)/g, '$1-')); }
       return { ok: true, codes: M.backup.slice(), path: 'Documents\\אחת שאלתי - קודי גיבוי לשחזור.txt', left: 10 };
     },
-    '/kiosk/recovery/keep': function () { return { ok: true, path: 'Documents\\אחת שאלתי - קוד שחזור.txt' }; },
+    '/kiosk/recovery/keep': function () { return { ok: true, path: 'E:\\אחת שאלתי - קוד שחזור.txt' }; },
     '/kiosk/enable': function (b) {
       if (!M.kiosk.hasPassword) throw mockErr('bad_request', 'יש להגדיר סיסמה תחילה');
       checkPw(b.password, false);
@@ -347,7 +353,7 @@
       if (typeof b.otzariaPath === 'string') M.kiosk.otzariaPath = b.otzariaPath;
       if (typeof b.venueName === 'string') M.kiosk.venueName = b.venueName.slice(0, 60);
       if (typeof b.dedicationText === 'string') M.kiosk.dedicationText = b.dedicationText.slice(0, 120);
-      ['readOnly', 'allowExcelDocs', 'twoFactor', 'clock', 'restScreen', 'fullscreenOtzaria', 'sideBar', 'sideBarIconsOnly', 'resetOnShutdown', 'showParsha', 'showDafYomi'].forEach(function (k) { if (typeof b[k] === 'boolean') M.kiosk[k] = b[k]; });
+      ['readOnly', 'allowExcelDocs', 'twoFactor', 'clock', 'restScreen', 'fullscreenOtzaria', 'sideBar', 'sideBarIconsOnly', 'sideBarKeyboard', 'resetOnShutdown', 'showParsha', 'showDafYomi'].forEach(function (k) { if (typeof b[k] === 'boolean') M.kiosk[k] = b[k]; });
       /* פתיחה זמנית: אותם כללים כמו בגשר (Kiosk.ApplyTempUnlockSettings) */
       var tu = M.kiosk.tempUnlock;
       if (typeof b.tempUnlockPassword === 'string' && b.tempUnlockPassword) {
@@ -580,8 +586,10 @@
     return { vendor: M.bios.vendor, manufacturer: M.bios.manufacturer, model: M.bios.model, steps: steps };
   };
   mockRoutes['/sys/update-check'] = function () {
-    return { current: '1.0.5', latest: '1.0.5', newer: false, canInstall: false, url: 'https://github.com/Hadabadra/achat-shaalti/releases/latest' };
+    return { current: '1.0.5', latest: '1.0.5', newer: false, canInstall: false, url: 'https://github.com/achat-shaalti/achat-shaalti/releases/latest' };
   };
+  mockRoutes['/sys/update-local-pick'] = function () { return { cancelled: true }; };
+  mockRoutes['/sys/update-local-install'] = function () { return { started: false, message: 'תצוגה מקדימה: אין התקנה' }; };
   mockRoutes['/sys/update-install'] = function () { return { started: false, message: 'הגשר מעודכן (1.0.3)' }; };
 
   var mock = {
@@ -601,14 +609,19 @@
 
   var impl = window.Otzaria ? real : mock;
 
+  /* תצוגה בלבד כשהגשר לא פועל: הקריאות הולכות לנתוני הדוגמה, אבל החיפוש אחרי הגשר (probe)
+     ממשיך לגשר האמיתי, כדי שברגע שיעלה נחזור אליו. */
+  var demo = false;
   SS.bridge = {
-    isMock: !window.Otzaria,
+    get isMock() { return !window.Otzaria || demo; },
+    get isDemo() { return demo; },
+    useDemo: function (on) { demo = !!on && !!window.Otzaria; impl = demo ? mock : real; },
     health: null,
     onLost: null,
     onPairing: null,
     get port() { return impl.port; },
     async probe() {
-      var h = await impl.probe();
+      var h = await (demo ? real : impl).probe();
       SS.bridge.health = h;
       return h;
     },

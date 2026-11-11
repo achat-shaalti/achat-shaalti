@@ -4,8 +4,8 @@
   var SS = (window.SS = window.SS || {});
   var ui = SS.ui;
   SS.sections = SS.sections || [];
-  SS.VERSION = '1.0.5';
-  SS.BRIDGE_URL = 'https://github.com/Hadabadra/achat-shaalti/releases/latest';
+  SS.VERSION = '1.0.6';
+  SS.BRIDGE_URL = 'https://github.com/achat-shaalti/achat-shaalti/releases/latest';
 
   var state = { current: null, connected: false, probeTimer: null, suspended: false, booted: false };
 
@@ -104,7 +104,23 @@
     var b = document.getElementById('top-compact');
     if (b) b.addEventListener('click', function () { SS.prefs.set('compact', !SS.prefs.get('compact', false)); applyCompact(); });
     applyCompact();
+    var w = document.getElementById('top-style');
+    if (w) w.addEventListener('click', function () { SS.prefs.set('winStyle', !SS.prefs.get('winStyle', false)); applyWinStyle(); });
+    applyWinStyle();
   });
+
+  /* משוב 03.11: סגנון "הגדרות Windows 11" לבחירה (ברירת מחדל: סגנון אוצריא). css/win11.css פעיל רק עם body.ss-win11 */
+  function applyWinStyle() {
+    var on = !!SS.prefs.get('winStyle', false);
+    document.body.classList.toggle('ss-win11', on);
+    var b = document.getElementById('top-style');
+    if (b) {
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.title = on ? 'מעבר לסגנון אוצריא' : 'מעבר לסגנון הגדרות Windows';
+      b.innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1"/><rect x="13" y="3.5" width="7.5" height="7.5" rx="1"/><rect x="3.5" y="13" width="7.5" height="7.5" rx="1"/><rect x="13" y="13" width="7.5" height="7.5" rx="1"/></svg>';
+    }
+  }
+  SS.applyWinStyle = applyWinStyle;
   setTimeout(applyCompact, 0);
   SS._offline = false;
   SS.isOfflineMode = function () { return !!SS._offline; };
@@ -216,6 +232,8 @@
     main.scrollTop = 0;
     if (Date.now() - v.at > 5 * 60 * 1000) { v.at = Date.now(); s.load(v.body); }
     try { localStorage.setItem('ss.section', s.id); } catch (e) { /* ignore */ }
+    /* SDK 0.9.98.1: מצב לשחזור — אוצריא יכולה לפנות כרטיסייה ולטעון אותה מחדש באותו מסך */
+    try { if (window.Otzaria) window.Otzaria.call('plugin.setRestoreState', { state: { schemaVersion: 1, section: s.id } }).catch(function () {}); } catch (e) { /* מארח ישן */ }
   }
   SS.show = show;
 
@@ -265,7 +283,11 @@
     if (state.connected && window.SdkX) SdkX.notify('גשר אוצריא אינו מחובר', 'הגדרות המערכת ומצב הנעילה אינם זמינים עד שהגשר יחזור');
     state.connected = false;
     setStatus(false);
+    /* משוב 03.11: כשהגשר לא פועל מציגים את ההגדרות בתצוגה בלבד, עם אזהרה — ולא מסך חסום.
+       מסך ההסבר המלא נפתח מכפתור באזהרה. */
+    if (window.Otzaria && !state.helpOpen) { enterViewOnly(); scheduleProbe(); return; }
     document.getElementById('shell-body').hidden = true;
+    setBanner(false);
     var off = document.getElementById('offline');
     off.hidden = false;
     if (!off.dataset.built) {
@@ -283,7 +305,10 @@
         '<button class="btn btn-primary btn-lg" id="off-dl">' + ui.icon('download') + 'פתח בדפדפן</button>' +
         '<button class="btn btn-tonal btn-lg" id="off-copy">' + ui.icon('link') + 'העתק קישור</button>' +
         '<button class="btn btn-tonal btn-lg" id="off-retry">' + ui.icon('refresh') + 'נסה שוב</button></div>' +
+        (window.Otzaria ? '<p><button class="btn btn-text" id="off-view">חזרה להגדרות (תצוגה בלבד)</button></p>' : '') +
         '<p class="muted small" id="off-note">בודק שוב אוטומטית כל 10 שניות…</p></div>';
+      var bv = off.querySelector('#off-view');
+      if (bv) bv.addEventListener('click', function () { state.helpOpen = false; showOffline(); });
       off.querySelector('#off-dl').addEventListener('click', function () { SS.openUrl(SS.BRIDGE_URL); });
       off.querySelector('#off-copy').addEventListener('click', function () {
         SS.copyText(SS.BRIDGE_URL).then(function (ok) {
@@ -302,6 +327,74 @@
     scheduleProbe();
   }
 
+  /* ---------- תצוגה בלבד (בלי גשר) ---------- */
+  function setBanner(on) {
+    var b = document.getElementById('ro-banner');
+    if (!on) { if (b) b.hidden = true; return; }
+    if (!b) {
+      b = ui.el('<div class="ro-banner" id="ro-banner" role="status">' +
+        '<span class="ro-ic">' + ui.icon('bridge') + '</span>' +
+        '<div class="ro-text"><b>התוכנה "אחת שאלתי" אינה פועלת</b>' +
+        '<span>אפשר לעבור בין כל המסכים כרגיל. הערכים לדוגמה, ושינוי הגדרות יתאפשר כשהתוכנה תפעל.</span></div>' +
+        '<button class="btn btn-tonal" id="ro-help">' + ui.icon('download') + 'איך מפעילים?</button></div>');
+      var sb = document.getElementById('shell-body');
+      sb.parentNode.insertBefore(b, sb);
+      b.querySelector('#ro-help').addEventListener('click', function () { state.helpOpen = true; showOffline(); });
+    }
+    b.hidden = false;
+  }
+  /* 11.2026: במקום inert (שהקפיא את כל המסך) — חוסמים רק פעולות ששונות ערך: שינוי שדות, מתגים, מחוונים וכפתורי פעולה.
+     ניווט נשאר פעיל: לשוניות, הרחבה/כיווץ, קישורי עזרה וגלילה. */
+  var NAV_SEL = '[role="tab"], .k-tab, summary, a[href], [data-nav], [data-section], .seg-nav, .help-link';
+  var roToastAt = 0;
+  function roBlocked(e) {
+    var main = document.getElementById('content');
+    if (!main || !main.classList.contains('ro')) return;
+    var t = e.target;
+    if (!t || !t.closest || t.closest(NAV_SEL)) return;
+    var ctl = t.closest('input, select, textarea, button, [role="switch"], [role="slider"], [role="button"], .switch, .slider, .chip, .btn');
+    if (!ctl || !main.contains(ctl)) return;
+    if (e.type === 'keydown' && !/^(Enter| |ArrowLeft|ArrowRight|ArrowUp|ArrowDown|Home|End|PageUp|PageDown)$/.test(e.key)) {
+      if (!/^(INPUT|TEXTAREA)$/.test(ctl.tagName)) return;
+    }
+    e.preventDefault(); e.stopPropagation();
+    if (Date.now() - roToastAt > 2500) { roToastAt = Date.now(); try { ui.toast('כדי לשנות הגדרות צריך שהתוכנה "אחת שאלתי" תפעל', 'info'); } catch (x) { /* בלי טוסט */ } }
+  }
+  ['click', 'pointerdown', 'keydown', 'beforeinput', 'change', 'input'].forEach(function (ev) { document.addEventListener(ev, roBlocked, true); });
+  function setReadOnly(on) {
+    var main = document.getElementById('content');
+    main.classList.toggle('ro', on);
+    main.removeAttribute('inert');
+    main.setAttribute('aria-readonly', on ? 'true' : 'false');
+  }
+  function resetViews() {
+    views = {};
+    var main = document.getElementById('content');
+    while (main.firstChild) main.removeChild(main.firstChild);
+  }
+  function enterViewOnly() {
+    document.getElementById('offline').hidden = true;
+    setBanner(true);
+    setReadOnly(true);
+    if (!SS.bridge.isDemo) {
+      SS.bridge.useDemo(true);
+      resetViews();
+      var start = null;
+      try { start = localStorage.getItem('ss.section'); } catch (e) { start = null; }
+      document.getElementById('shell-body').hidden = false;
+      show((location.hash || '').replace('#', '') || start || 'audio');
+    } else document.getElementById('shell-body').hidden = false;
+  }
+  function leaveViewOnly() {
+    if (!SS.bridge.isDemo) return false;
+    SS.bridge.useDemo(false);
+    state.helpOpen = false;
+    setBanner(false);
+    setReadOnly(false);
+    resetViews();
+    return true;
+  }
+
   function scheduleProbe() {
     clearTimeout(state.probeTimer);
     if (state.suspended) return;
@@ -313,9 +406,10 @@
   async function connect() {
     var h = null;
     try { h = await SS.bridge.probe(); } catch (e) { h = null; }
-    if (!h) { if (state.connected || !document.getElementById('offline').dataset.built) showOffline(); return false; }
+    if (!h) { if (state.connected || (!SS.bridge.isDemo && !document.getElementById('offline').dataset.built)) showOffline(); return false; }
     clearTimeout(state.probeTimer);
-    var wasConnected = state.connected;
+    var leftDemo = leaveViewOnly();
+    var wasConnected = state.connected && !leftDemo;
     state.connected = true;
     setStatus(true);
     document.getElementById('offline').hidden = true;
@@ -351,7 +445,8 @@
     var details = ('דיווח תקלות אוטומטי מהגשר (' + r.items.length + ')\nתוסף: הגדרות מערכת ' + SS.VERSION + '\n\n' +
       r.items.map(function (x) { return x.text; }).join('\n\n=====\n\n') + (tail ? '\n\n===== יומן מקוצר =====\n' + tail : '')).slice(0, 5000);
     var res = null;
-    try { res = await window.Otzaria.call('feedback.report', { details: details, reportType: 'bug' }); } catch (e) { res = null; }
+    var kind = r.items.some(function (x) { return /crash|קריסה/i.test(String(x.text || '')); }) ? 'crash' : 'bug';
+    try { res = await window.Otzaria.call('feedback.report', { details: details, reportType: kind }); } catch (e) { res = null; }
     var val = res && (res.data !== undefined ? res.data : res);
     if (val === 'sent' || val === 'queued') {
       var ids = r.items.map(function (x) { return x.id; });
@@ -415,6 +510,8 @@
     var lb = document.getElementById('top-lang');
     lb.textContent = window.I18N.toggleLabel();
     lb.addEventListener('click', function () { window.I18N.toggle(); });
+    var ab = document.getElementById('top-about');
+    if (ab) { ab.innerHTML = ui.icon('info'); ab.addEventListener('click', function () { show('about'); }); }
     var fb = document.getElementById('top-feedback');
     fb.innerHTML = window.Feedback.ICON;
     fb.addEventListener('click', function () {
@@ -424,6 +521,7 @@
       });
     });
     if (payload && payload.plugin && payload.plugin.version) SS.VERSION = payload.plugin.version;
+    setTimeout(function () { window.Feedback.reportCrashes({ plugin: 'הגדרות מערכת', version: SS.VERSION, bridge: SS.bridge, restore: payload && payload.restore }); }, 6000);
     buildNav();
     publishSettingsBooks();
     document.getElementById('top-refresh').addEventListener('click', function () {

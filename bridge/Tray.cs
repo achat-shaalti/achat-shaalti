@@ -5,7 +5,7 @@ namespace OtzariaBridge;
 public static class Tray
 {
     private static NotifyIcon _icon;
-    private static ToolStripMenuItem _status, _exit, _plugins, _install, _lang, _about, _unpair, _changelog, _report, _shot, _shotRegion;
+    private static ToolStripMenuItem _status, _exit, _plugins, _install, _lang, _about, _unpair, _changelog, _report, _shot, _shotRegion, _unlockPw, _maint, _maintEnd;
     private static ContextMenuStrip _menu;
     private static Control _invoker;
 
@@ -20,13 +20,16 @@ public static class Tray
         _plugins = new ToolStripMenuItem("", null, (_, _) => Installer.OpenPluginsFolder());
         _install = new ToolStripMenuItem("", null, (_, _) => { Installer.DeployPlugins(); Installer.InstallPluginsInOtzaria(); });
         _lang = new ToolStripMenuItem("", null, (_, _) => { Lang.Set(Lang.En ? "he" : "en"); ApplyTexts(); });
-        _exit = new ToolStripMenuItem("", null, (_, _) => Application.ExitThread());
+        _exit = new ToolStripMenuItem("", null, (_, _) => TryExit());
         _about = new ToolStripMenuItem("", null, (_, _) => AboutForm.Open());
         _unpair = new ToolStripMenuItem("", null, (_, _) => PairingForm.Open());
         _changelog = new ToolStripMenuItem("", null, (_, _) => ChangelogForm.Open());
         _report = new ToolStripMenuItem("", null, (_, _) => ReportsForm.Open());
         _shot = new ToolStripMenuItem("", null, (_, _) => _invoker.BeginInvoke(() => { _menu.Close(); Thread.Sleep(250); Screenshot.Capture(false); }));
         _shotRegion = new ToolStripMenuItem("", null, (_, _) => _invoker.BeginInvoke(() => { _menu.Close(); Thread.Sleep(250); Screenshot.Capture(true); }));
+        _unlockPw = new ToolStripMenuItem("", null, (_, _) => PasswordAction(false));
+        _maint = new ToolStripMenuItem("", null, (_, _) => PasswordAction(true));
+        _maintEnd = new ToolStripMenuItem("", null, (_, _) => Kiosk.EndMaintenance());
         // משוב 15.10 (תיקון): במגש נשארים כל הפריטים; הקיצור הוא בסרגל הנעילה (Extras.cs)
         // משוב 15.10: סמל ברקע בפינה (לפי בחירה) + גודל
         var wm = new ToolStripMenuItem(Lang.En ? "Corner logo" : "סמל ברקע בפינה");
@@ -49,13 +52,15 @@ public static class Tray
             foreach (ToolStripItem x in wm.DropDownItems)
                 if (x is ToolStripMenuItem m && m.Tag is int sz) m.Checked = sz == Config.Get("watermark.size", 112);
         };
-        menu.Items.AddRange(new ToolStripItem[] { _about, _changelog, _report, _shot, _shotRegion, wm, _install, _plugins, _unpair, _lang, new ToolStripSeparator(), _exit });
+        menu.Items.AddRange(new ToolStripItem[] { _unlockPw, _maint, _maintEnd, _about, _changelog, _report, _shot, _shotRegion, wm, _install, _plugins, _unpair, _lang, new ToolStripSeparator(), _exit });
 
-        foreach (var (item, glyph) in new (ToolStripItem, string)[] { (_about, ""), (_changelog, ""), (_report, ""), (_shot, ""), (_shotRegion, ""),
+        foreach (var (item, glyph) in new (ToolStripItem, string)[] { (_unlockPw, ""), (_maint, ""), (_maintEnd, ""), (_about, ""), (_changelog, ""), (_report, ""), (_shot, ""), (_shotRegion, ""),
                      (wm, ""), (_install, ""), (_plugins, ""), (_unpair, ""), (_lang, ""), (_exit, "") })
             TrayMenuStyle.Glyph(item, glyph);
+        menu.Items.Insert(6, new ToolStripSeparator());
+        menu.Items.Insert(10, new ToolStripSeparator());
         menu.Items.Insert(3, new ToolStripSeparator());
-        menu.Items.Insert(7, new ToolStripSeparator());
+        menu.Opening += (_, _) => UpdateStatus();
         TrayMenuStyle.Apply(menu);
 
         _icon = new NotifyIcon
@@ -104,9 +109,59 @@ public static class Tray
         };
     }
 
+    /// <summary>יציאה מהמגש: בנעילה פעילה (או כשהשירות נועל) נדרשת סיסמת הנעילה/קוד שחזור. כשל באימות או ב-pipe = נשארים</summary>
+    private static void TryExit()
+    {
+        bool locked = false;
+        // WHY: שירות מותקן ששותק (pipe) + config.json שנערך ל-active=false לא מתירים יציאה חופשית: fail-closed
+        try { locked = Kiosk.IsActive || HardLock.ServiceActive || Kiosk.ServiceDown(); } catch { locked = true; }
+        if (!locked) { Application.ExitThread(); return; }
+        using var f = new ExitPasswordForm();
+        if (f.ShowDialog() != DialogResult.OK) return;
+        try
+        {
+            // שירות מופסק באמת (SCM): אין מי שיאמת סיסמה; קוד שחזור בלבד מול ה-hash המקומי (כמו --unlock)
+            if (Kiosk.ServiceStopped()) { if (!Kiosk.IsRecoveryCode(f.Password)) throw BridgeException.BadRequest(Lang.T("רכיב ההקשחה מופסק: נדרש קוד שחזור", "Hardening service stopped: recovery code required")); }
+            else Kiosk.RequirePasswordOrRecovery(f.Password);
+        }
+        catch (Exception ex)
+        {
+            Notify(Program.AppName, ex is BridgeException ? ex.Message : Lang.T("אימות נכשל", "Verification failed"));
+            return;
+        }
+        Application.ExitThread();
+    }
+
+    /// <summary>ביטול נעילה בסיסמה / פתיחת מצב תחזוקה מהמגש — בדיאלוג מקומי, בלי תלות בתוספים. אותו אימות (הגבלת ניסיונות, Hello) כמו בשאר המערכת</summary>
+    private static void PasswordAction(bool maintenance)
+    {
+        using var f = new ExitPasswordForm(maintenance
+            ? Lang.T("מצב תחזוקה (" + Maintenance.Minutes + " דקות)", "Maintenance mode (" + Maintenance.Minutes + " min)")
+            : Lang.T("ביטול נעילה בסיסמה", "Unlock with password"));
+        if (f.ShowDialog() != DialogResult.OK) return;
+        string pw = f.Password;
+        SafeTask.Run(() =>
+        {
+            try
+            {
+                if (maintenance) Kiosk.StartMaintenance(pw);
+                else
+                {
+                    Kiosk.UnlockWithPassword(pw);
+                    Notify(Program.AppName, Lang.T("הנעילה בוטלה.", "Lock mode turned off."), ToolTipIcon.Info);
+                }
+            }
+            catch (Exception ex) { Notify(Program.AppName, ex is BridgeException ? ex.Message : Lang.T("האימות נכשל", "Verification failed")); }
+        });
+    }
+
+    public static void RefreshStatus() => Invoke(UpdateStatus);
+
     private static void ApplyTexts()
     {
         if (_menu == null) return;
+        _unlockPw.Text = Lang.T("ביטול נעילה בסיסמה…", "Unlock with password…");
+        _maint.Text = Lang.T("מצב תחזוקה (" + Maintenance.Minutes + " דקות) לעדכון אוצריא…", "Maintenance mode (" + Maintenance.Minutes + " min) to update Otzaria…");
         _menu.RightToLeft = Lang.En ? RightToLeft.No : RightToLeft.Yes;
         _shot.Text = Lang.T("צילום מסך (Ctrl+Shift+F11)", "Screenshot (Ctrl+Shift+F11)");
         _shotRegion.Text = Lang.T("צילום אזור (Ctrl+Shift+F12)", "Region screenshot (Ctrl+Shift+F12)");
@@ -142,9 +197,12 @@ public static class Tray
         else a();
     }
 
+    /// <summary>יציאה מהחוט הראשי אחרי שחרור חירום מאומת (Kiosk.PollEmergencyMarker)</summary>
+    internal static void ExitNow() => Invoke(() => Application.ExitThread());
+
     public static void SetKioskState(bool active) => Invoke(() =>
     {
-        if (_exit != null) _exit.Enabled = !active; // במצב נעילה אין יציאה מהמגש
+        // WHY: "יציאה" מושבתת הייתה מונעת גם יציאה לגיטימית; עכשיו היא פעילה אך דורשת סיסמה כשנעילה/שירות פעילים (TryExit)
         UpdateStatus();
     });
 
@@ -157,7 +215,15 @@ public static class Tray
         if (_status == null) return;
         string text = Lang.T(Program.AppName + " ", Program.AppNameEn + " ") + Program.Version + Lang.T(" — פורט ", " — port ") + Program.Port;
         if (Kiosk.IsActive) text += Lang.T(" (נעילה פעילה)", " (lock mode on)");
+        int ml = Kiosk.MaintenanceSecondsLeft();
+        if (ml > 0) text += Lang.T(" — מצב תחזוקה: נותרו " + TempUnlock.Format(ml), " — maintenance: " + TempUnlock.Format(ml) + " left");
         _status.Text = text;
+        // פריטי הסיסמה/תחזוקה מוצגים רק כשהנעילה פעילה (או שירות הנעילה אוכף)
+        bool locked = false;
+        try { locked = Kiosk.IsActive || HardLock.ServiceActive; } catch { locked = true; }
+        if (_unlockPw != null) _unlockPw.Visible = locked;
+        if (_maint != null) _maint.Visible = locked && ml == 0;
+        if (_maintEnd != null) { _maintEnd.Visible = ml > 0; _maintEnd.Text = Lang.T("סיום מצב תחזוקה (חזרה לנעילה)", "End maintenance mode (re-lock)"); }
         if (_icon != null)
         {
             string tip = Lang.T(Program.AppName, Program.AppNameEn) + " — " + (Kiosk.IsActive ? Lang.T("החסימה פעילה", "lock on") : Lang.T("החסימה כבויה", "lock off"));
@@ -199,8 +265,7 @@ internal sealed class AboutForm : Form
         var logo = new PictureBox { Image = new Icon(Overlay.AppIcon(), 64, 64).ToBitmap(), SizeMode = PictureBoxSizeMode.CenterImage, Height = 76, Dock = DockStyle.Top };
         var title = new Label { Text = Lang.T(Program.AppName, Program.AppNameEn), Font = new Font("Segoe UI Semibold", 16f), Height = 38, Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleCenter };
         var ver = new Label { Text = Lang.T("גרסה ", "Version ") + Program.Version + " · " + Lang.T(Program.GemachName, Program.GemachNameEn), Height = 26, Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.DimGray };
-        var ded = new Label { Text = "לעילוי נשמת הנערה הצדקנית\nאסתר גיטה דינר בת רבי מיכאל שלום הלוי שיבדלט\"א\nתהא נשמתה צרורה בצרור החיים. תנצב\"ה", Height = 84, Font = new Font("Segoe UI", 10.5f), Dock = DockStyle.Top, TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.FromArgb(90, 70, 40) };
-        // קרדיט נפרד מההקדשה: ספריית חישוב הזמנים של הגיבוי (לא קשור להקדשה למעלה)
+        // קרדיט: ספריית חישוב הזמנים של הגיבוי (לא קשור להקדשה למעלה)
         var zmanimCredit = new Label { Text = Lang.T(
                 "חישוב זמני היום (גיבוי): פרויקט Zmanim/KosherJava מאת Eliyahu Hershfeld (kosherjava.com), ברישיון LGPL",
                 "Fallback daily zmanim: the Zmanim/KosherJava project by Eliyahu Hershfeld (kosherjava.com), LGPL license"),
@@ -234,10 +299,10 @@ internal sealed class AboutForm : Form
         row.Controls.AddRange(new Control[] { _check, _install });
 
         if (OfflineMode.IsOn()) // #9: אוצריא במצב מנותק — מסתירים את אזור העדכונים
-            Controls.AddRange(new Control[] { lic, zmanimLink, zmanimCredit, ded, ver, title, logo });
+            Controls.AddRange(new Control[] { lic, zmanimLink, zmanimCredit, ver, title, logo });
         else
         {
-            Controls.AddRange(new Control[] { row, _state, link, lic, zmanimLink, zmanimCredit, ded, ver, title, logo });
+            Controls.AddRange(new Control[] { row, _state, link, lic, zmanimLink, zmanimCredit, ver, title, logo });
             Shown += async (_, _) => await DoCheck(false);
         }
     }
@@ -310,5 +375,29 @@ internal sealed class AboutForm : Form
             SetState(ex.Message, Color.Firebrick);
             _check.Enabled = true;
         }
+    }
+}
+
+/// <summary>בקשת סיסמה ליציאה מהמגש בזמן נעילה</summary>
+internal sealed class ExitPasswordForm : Form
+{
+    private readonly TextBox _pw = new() { UseSystemPasswordChar = true, Dock = DockStyle.Top };
+    public string Password => _pw.Text;
+
+    public ExitPasswordForm(string title = null)
+    {
+        Text = title ?? Lang.T("יציאה מהגשר", "Exit the bridge");
+        RightToLeft = Lang.En ? RightToLeft.No : RightToLeft.Yes;
+        RightToLeftLayout = !Lang.En;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = MinimizeBox = false;
+        StartPosition = FormStartPosition.CenterScreen;
+        TopMost = true;
+        ClientSize = new Size(340, 120);
+        Padding = new Padding(14);
+        var ok = new Button { Text = Lang.T("אישור", "OK"), DialogResult = DialogResult.OK, Dock = DockStyle.Bottom };
+        var lbl = new Label { Text = Lang.T("הזינו את סיסמת הנעילה:", "Enter the lock password:"), Dock = DockStyle.Top, Height = 28 };
+        Controls.AddRange(new Control[] { ok, _pw, lbl });
+        AcceptButton = ok;
     }
 }
