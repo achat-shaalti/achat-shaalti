@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>שומר מסך</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<div class="shell">
+<header class="topbar"><img class="logo" src="icon/icon.png" alt="">
+  <div class="ttl"><div class="t1">שומר מסך <span class="t2" id="ver"></span></div><a class="t2 lnk" id="topQuote" title="ש&quot;ך יו&quot;ד רעז ס&quot;ק א – לפתיחה בספרייה">״וידוע לחכמי האמת שיש מלאך א' נקרא ש"ד והוא שומר דפין על מי שמניח ספר פתוח ויוצא שמשכח תלמודו״ – ש"ך יו"ד רעז</a></div>
+  <button class="btn text" data-p="hal">הלכות</button><button class="btn text" data-p="src">מקורות</button><button class="btn text" data-p="log">יומן שינויים</button><button class="btn text" id="fbOpen">דיווח / הצעה</button></header>
+<main class="content">
+ <section class="card"><h2>הפעלה</h2>
+  <label class="row sw"><span>שומר מסך פעיל<small>מופעל אוטומטית אחרי חוסר פעילות</small></span><input type="checkbox" id="enabled"><i></i></label>
+  <label class="row sw"><span>למנוע כיבוי מסך בזמן השומר<small>תלוי בתמיכת המערכת</small></span><input type="checkbox" id="keepAwake"><i></i></label>
+  <label class="row sw"><span>להפעיל רק כשספר פתוח בקורא<small>לא באמצע חיפוש או כלי אחר</small></span><input type="checkbox" id="onlyInBook"><i></i></label>
+ </section>
+ <section class="card"><h2>זמנים</h2>
+  <div class="row"><label for="idleMin">להפעיל אחרי חוסר פעילות (דקות)</label><input type="number" id="idleMin" min="1" max="240"></div>
+  <div class="row"><label for="runMin">משך ההצגה (דקות)</label><input type="number" id="runMin" min="1" max="240"></div>
+ </section>
+ <section class="card"><h2>שעות שקט</h2>
+  <label class="row sw"><span>לא להפעיל בשעות מסוימות<small>למשל בזמן שיעור או סדר לימוד</small></span><input type="checkbox" id="quiet"><i></i></label>
+  <div class="row"><label for="quietFrom">מהשעה</label><input type="time" id="quietFrom"></div>
+  <div class="row"><label for="quietTo">עד השעה</label><input type="time" id="quietTo"></div>
+ </section>
+ <section class="card"><h2>תצוגה</h2>
+  <label class="row sw"><span>שעה ותאריך עברי על המסך</span><input type="checkbox" id="showClock"><i></i></label>
+  <label class="row sw"><span>ציטוט הש"ך בשורה התחתונה</span><input type="checkbox" id="showVerse"><i></i></label>
+  <label class="row sw"><span>ציטוטים נוספים<small>פסוקים ומאמרי חז"ל על לימוד התורה וניצול הזמן, בסגנונות עם ציטוטים</small></span><input type="checkbox" id="quotesLib"><i></i></label>
+  <div class="row"><label for="bg">רקע השומר</label><span style="display:flex;gap:8px;align-items:center"><input type="color" id="bgColor" value="#f6ede5" style="display:none;width:40px;height:34px;padding:2px"><select id="bg"><option value="light">אוצריא בהיר</option><option value="dark">אוצריא כהה</option><option value="black">שחור</option><option value="custom">צבע אחר…</option></select></span></div>
+  <div class="row"><label for="slogan">סלוגן</label><input type="text" id="slogan" maxlength="80" style="width:min(260px,50%)"></div>
+ </section>
+ <section class="card wide"><h2>סגנון</h2>
+  <div class="styles" id="styles"></div>
+  <div class="row"><span></span><button class="btn" id="preview">תצוגה מקדימה</button></div>
+ </section>
+</main></div>
+<div id="modal"><div class="mh"><b id="mT"></b><button class="btn out" id="mClose">חזרה להגדרות</button></div><div class="mb" id="mB"></div></div>
+<div id="pSrc" hidden><div class="note" style="margin-top:0">המקורות מתוך הקובץ "ספר פתוח". הלשונות הן של המקורות עצמם; לשאלה מעשית יש לפנות לרב.</div><div id="srcMain"></div><div class="hl" id="srcPc"></div></div>
+<div id="pLog" hidden><div class="log" id="log"></div></div>
+<div id="fb"><b style="display:block;margin-bottom:8px">דיווח או הצעה למפתח</b>
+ <select id="fbKind"><option value="suggestion">הצעה לשיפור</option><option value="bug">דיווח על תקלה</option><option value="content">הערה על תוכן או ציטוט</option><option value="other">אחר</option></select>
+ <textarea id="fbText" rows="4" placeholder="כתבו כאן…"></textarea>
+ <div id="fbMailRow" style="display:none"><input type="email" id="fbMail" placeholder="מייל לחזרה (לא חובה)"></div>
+ <div style="display:flex;gap:8px;align-items:center"><button class="btn" id="fbSend">שליחה</button><button class="btn out" id="fbClose">סגירה</button><span id="fbMsg" style="font-size:12px"></span></div></div>
+<div id="ss" data-m="splash"><canvas id="ssCanvas"></canvas>
+ <div id="ssLock"><div id="ssBook"><div class="spr"></div></div>
+ <div id="ssBrand"><div class="w">אוצריא</div><div class="s" id="ssSlog"></div></div></div>
+ <div id="ssQuote"><div class="spr" id="ssQLogo"></div><div class="t" id="ssText"></div><a id="ssLink"></a></div>
+ <div id="ssClock"><div class="tm" id="ssTm"></div><div class="dt" id="ssDt"></div></div>
+ <div id="ssVerse">״וידוע לחכמי האמת שיש מלאך א' נקרא ש"ד והוא שומר דפין על מי שמניח ספר פתוח ויוצא שמשכח תלמודו״ – ש"ך יו"ד רעז ס"ק א</div>
+ <div id="ssHint">הזיזו את העכבר או הקישו מקש כדי לחזור ללימוד</div></div>
+<script src="halacha.js"></script><script src="app.js"></script></body></html>

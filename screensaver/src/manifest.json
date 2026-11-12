@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "com.hadbedara.otzaria-screensaver",
+  "name": "שומר מסך",
+  "version": "1.7.0",
+  "stability": "stable",
+  "description": "שומר מסך ללימוד בצבעי אוצריא: ספר וסלוגן, ספר נפתח, בועות וציטוטים מחזקים, עם מקורות לשמירת כבוד הספר. פועל בלי אינטרנט.",
+  "author": "חד בדרא",
+  "entrypoint": "index.html",
+  "icon": "icon/icon.png",
+  "minAppVersion": "0.9.98",
+  "sdkVersion": "1.x",
+  "permissions": [
+    "reader.open",
+    "reader.toolbar",
+    "navigation.write",
+    "library.books.read",
+    "library.content.read",
+    "app.startup_contributions",
+    "app.run_on_startup",
+    "app.background_keep_alive",
+    "events.subscribe:reader.current_ref_changed",
+    "events.subscribe:reader.current_book_changed",
+    "events.subscribe:reader.sectionContentChanged",
+    "events.subscribe:reader.selection_changed",
+    "events.subscribe:navigation.changed",
+    "events.subscribe:workspace.changed",
+    "events.subscribe:settings.changed",
+    "events.subscribe:theme.changed"
+  ],
+  "contributes": {
+    "toolTab": {
+      "title": "שומר מסך",
+      "order": 200,
+      "defaultPinned": true,
+      "iconName": "weather_moon_24_regular"
+    },
+    "background": {
+      "entrypoint": "background.html"
+    },
+    "startup": {
+      "activationEvents": [
+        "app.startup"
+      ],
+      "keepAlive": true
+    }
+  }
+}
