@@ -1,6 +1,6 @@
 # תוכנית המשך — כלי מערכת לאוצריא
 
-## נשאר פתוח בעצירה 11.2026 (מושהה עד ~מאי 2027)
+## נשאר פתוח (11.2026)
 - **#126 — סימון Releases ישנים כ-Pre-release** (v3.9.1 ומטה, נוצרו לפני 18.10.2026; לא לגעת ב-v1.0.x, bridge-min, build-next). נדחה: סשן Claude חסום מעריכת Releases (HTTP 403). מי שיש לו admin מריץ:
   `gh api "repos/achat-shaalti/achat-shaalti/releases?per_page=100" --jq '.[] | select(.created_at < "2026-10-18" and (.tag_name|test("^v[0-9]")) and (.prerelease|not)) | .id' | ForEach-Object { gh api -X PATCH "repos/achat-shaalti/achat-shaalti/releases/$_" -F prerelease=true --jq .tag_name }`
 - **מתווך הדיווחים (Cloudflare)**: `GH_REPO`/`GH_REPOS` = `achat-shaalti/achat-shaalti`, טוקן חדש (Issues: write), פריסה מחדש של `tools/relay/worker.js`. עד אז דיווחים מהתוספים לא מגיעים לגיטהאב; בינתיים התוספים מציעים לפתוח issue ידנית אחרי שליחת משוב.
