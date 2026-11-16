@@ -7,7 +7,6 @@
 - **פרסום לחנות**: תוספים 4.0.0 לא פורסמו (אין workflow חנות בריפו מאז ההקשחה). להעלות את שני ה-.otzplugin מבנייה של main, או להוסיף workflow חנות באישור יאיר.
 - **שחרור גשר** מ-main (`release.yml`, סביבת release) — יאיר.
 - **בדיקה על Windows**: #398 (שני תהליכי גשר / כיבוי בלי סיסמה), תיבת "שומר מסך" במתקין.
-- **ענף `mail-plugin`**: תוסף "דואר" — לבדוק מול Gmail/Outlook עם סיסמת אפליקציה; המשך: שליחה (SMTP), התראות, כמה חשבונות.
 - SDK 0.9.98.x שלא נכנס כי אינו מתאים: `app.getDivineNamesDisplay` ו-`events.setOptions` (התוספים לא מציגים טקסט ספרים), `network.fetchFile` ו-`searchFieldActions` (אין צורך), `ui.printFile` (דורש token מ-fs.openFolderFile — רלוונטי רק במצב החלופי של הסייר; אפשר בעתיד לכפתור הדפסת PDF).
 
 ## על next, לא משוחרר (גשר)
