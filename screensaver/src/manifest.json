@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "com.hadbedara.otzaria-screensaver",
   "name": "שומר מסך",
-  "version": "1.7.0",
+  "version": "2.0.1",
   "stability": "stable",
   "description": "שומר מסך ללימוד בצבעי אוצריא: ספר וסלוגן, ספר נפתח, בועות וציטוטים מחזקים, עם מקורות לשמירת כבוד הספר. פועל בלי אינטרנט.",
   "author": "חד בדרא",
