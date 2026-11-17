@@ -144,6 +144,7 @@ public static class Server
                     version = Program.Version,
                     port = Program.Port,
                     kioskActive = Kiosk.IsActive,
+                    idleMs = Kiosk.IdleMs(), // זמן מאז הקלט האחרון במחשב (שומר המסך: לא לקפוץ באמצע כתיבה/גלילה, #412)
                     platform = "windows",
                     auth = "token",
                     paired = Pairing.IsValid(req.Headers[Pairing.TokenHeader].ToString()),
