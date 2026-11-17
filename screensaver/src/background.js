@@ -1,4 +1,5 @@
-/* שומר מסך – מנוע רקע – חד בדרא – v1.6.1
+/* שומר מסך – מנוע רקע – חד בדרא – v2.1.0
+   2.1.0: זמן חוסר פעילות של Windows דרך הגשר (הקלדה וגלילה בכל מקום), ובסיום חוזרים לכרטיסייה שהייתה פעילה.
    פעילות נקבעת לפי אירועי הקורא וגם לפי שינוי במצב הקורא (ספר, מיקום, כרטיסיות).
    שומר המסך נפתח רק אחרי הזמן שהוגדר ללא שום שינוי, ואם הוגדר – רק כשספר פתוח. */
 (function(){
@@ -8,6 +9,14 @@ function inQuiet(s){if(!s.quiet)return false;var n=new Date(),t=('0'+n.getHours(
 var last=Date.now(),shownAt=0,sig='',lastEn=null,GRACE=10000,TICK=5000;
 function call(m,p){try{return Otzaria.call(m,p||{})}catch(e){return Promise.resolve({success:false})}}
 async function get(k){try{var r=await call('storage.get',{key:k});return(r&&r.success)?r.data:null}catch(e){return null}}
+var BP=[47917,47918,47919,47920,47921],bport=null;
+async function sysIdle(){   /* זמן מאז ההקשה/תנועת העכבר האחרונה במחשב, מהגשר "אחת שאלתי" (אם מותקן) */
+  var ports=bport?[bport]:BP;
+  for(var i=0;i<ports.length;i++){try{var c=new AbortController(),t=setTimeout(function(){c.abort()},1500);
+    var r=await fetch('http://127.0.0.1:'+ports[i]+'/health',{headers:{'X-Otzaria-Bridge':'1'},signal:c.signal});clearTimeout(t);
+    var j=await r.json(),d=j&&(j.data||j);if(d&&d.name==='otzaria-bridge'){bport=ports[i];return typeof d.idleMs==='number'?d.idleMs:null}}catch(e){}}
+  bport=null;return null;
+}
 function bump(){var n=Date.now();if(shownAt&&n-shownAt<GRACE)return;last=n}
 ['reader.current_ref_changed','reader.current_book_changed','reader.sectionContentChanged','reader.selection_changed','navigation.changed','workspace.changed','settings.changed','reader.toolbar_item_clicked'].forEach(function(e){try{Otzaria.on(e,bump)}catch(x){}});
 async function poll(){
@@ -24,8 +33,11 @@ async function tick(){
     var dis=(await get('ss_dismiss'))||0;if(shownAt&&dis>shownAt){shownAt=0;last=Date.now()}
     if(shownAt)return;
     if(inQuiet(st))return;
+    var si=await sysIdle();if(si!=null&&si<st.idleMin*60000){last=Math.max(last,Date.now()-si);return}
     if(Date.now()-Math.max(last,dis)<st.idleMin*60000)return;
     if(st.onlyInBook&&!(d&&d.currentType))return;   /* באמצע חיפוש/כלי אחר – לא מפריעים */
+    var ret=null;if(d&&d.openTabs){for(var i=0;i<d.openTabs.length;i++){var t=d.openTabs[i];if(!t.isSelf&&t.id===d.currentId&&(t.currentRef===d.currentRef||t.index===d.currentIndex)){ret={i:i,id:t.id};break}}}
+    await call('storage.set',{key:'ss_return',value:ret});
     shownAt=Date.now();
     var r=await call('plugin.openSelf',{param:{screensaver:true}});
     if(!(r&&r.success&&r.data)){shownAt=0;last=Date.now()}

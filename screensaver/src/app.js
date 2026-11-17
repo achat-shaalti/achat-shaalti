@@ -1,7 +1,7 @@
 /* שומר מסך לאוצריא – חד בדרא – v1.3.0 */
 (function(){
 'use strict';
-var VERSION='2.0.1';
+var VERSION='2.1.0';
 var DEFAULTS={enabled:true,keepAwake:true,onlyInBook:true,idleMin:2,runMin:10,style:'brand',v:2,slogan:'אוצריא מאגר תורני חינמי, רחב ומהיר לשימוש בכל מקום.',bg:'light',bgColor:'#f6ede5',showClock:false,showVerse:true,quotesLib:true,quiet:false,quietFrom:'12:00',quietTo:'13:30'};
 var STYLES=[['brand','ספר וסלוגן','כמו באתר אוצריא','bk'],['splash','ספר נפתח','מקומות משתנים','bk'],['float','ספר צף','מרחף על המסך','bk'],['bubbles','בועות אוצריא','בועות עם הספר','bk'],['quotes','ציטוטים','עם קישור למקור','"'],['bookq','ספר וציטוטים','ספר פתוח ומתחתיו ציטוט','bk']];
 var QUOTES=[
@@ -64,6 +64,7 @@ var SRC_PC={t:'מסך מחשב – סעיף י"ד בקובץ',
  ],
  refs:[['ש"ך יו"ד רעז – לפתיחה בספרייה',['שפתי כהן יורה דעה רעז','ש"ך יורה דעה רעז']],['שולחן ערוך יו"ד רעז',['שולחן ערוך יורה דעה רעז']]]};
 var LOG=[
+ ['2.1.0',['לא קופץ באמצע כתיבה או גלילה: כשהגשר "אחת שאלתי" מותקן, נבדק הזמן מאז הפעולה האחרונה במחשב כולו (מקלדת, עכבר, גלילה). בלי הגשר — כמו קודם, לפי השינויים בקורא','בסיום חוזרים לכרטיסייה שהייתה פתוחה, ולא לזו שלפניה']],
  ['2.0.1',['מספר גרסה גבוה מ-2.0.0 שהופץ בהתקנת אחת שאלתי, כדי שכל המשתמשים יקבלו עדכונים מהחנות. התוכן זהה ל-1.7.0']],
  ['1.7.0',['יציבה. תיקון: הסלוגן הופיע בפינה העליונה בסגנונות "ספר נפתח" ו"ספר צף"','"אוצריא בהיר" = צבע הרקע של אוצריא, "אוצריא כהה" = צבע הבחירה בגוון כהה; מתעדכן מיד כשמשנים צבע באוצריא','ציטוטים: רק פסוקים ומאמרי חז"ל נבחרים על לימוד התורה וניצול הזמן — בלי קטעים אקראיים, סימונים או אנגלית','סגנון חדש: "ספר וציטוטים"','"הלכות": כותרות התוכן מלאות (לא נחתכות), בלי מילים באנגלית','פועל בלי אינטרנט']],
  ['1.6.1',['תיקון: הספר והסלוגן הופיעו בהגדרות; אוצריא בהיר/כהה נשאבים מצבעי האפליקציה (רקע / צבע הבחירה); הגדרה להסתרת ציטוט הש"ך; הגדרות בשתי עמודות']],
@@ -211,7 +212,11 @@ function stop(rearm){
 }
 async function closeSelf(){
   try{var r=await call('reader.getCurrentState');var t=r&&r.data&&r.data.openTabs;if(!t)return;
-    for(var i=0;i<t.length;i++)if(t[i].isSelf){await call('reader.closeTab',{index:i});break}}catch(e){}
+    var ret=null;try{var g=await call('storage.get',{key:'ss_return'});ret=g&&g.success?g.data:null}catch(e){}
+    for(var i=0;i<t.length;i++)if(t[i].isSelf){await call('reader.closeTab',{index:i});break}
+    /* 2.1.0: חוזרים לכרטיסייה שהייתה פעילה לפני שומר המסך (ולא לזו שלפני כרטיסיית התוסף) */
+    if(ret){var r2=await call('reader.getCurrentState'),t2=r2&&r2.data&&r2.data.openTabs;if(t2)for(var k=0;k<t2.length;k++)if(t2[k].id===ret.id&&!t2[k].isSelf){if(k!==r2.data.openTabs.findIndex(function(x){return x.id===r2.data.currentId}))await call('reader.activateTab',{index:k});break}}
+  }catch(e){}
 }
 function activity(e){
   if(active){
