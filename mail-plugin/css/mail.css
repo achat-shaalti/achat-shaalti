@@ -133,3 +133,12 @@ label.mx-ib, label.mx-btn { display: inline-flex; align-items: center; gap: 0.35
 .mx-setup h3 { font-size: 1em; font-weight: 600; margin: 1.5em 0 0.25em; }
 .mx-chk { display: flex; align-items: center; gap: 0.6em; margin: 0.75em 0; cursor: pointer; }
 .mx-chk input { width: 1.1em; height: 1.1em; accent-color: var(--color-primary); }
+/* 1.1.0: סרגלי כלים */
+.mx-tb { display: flex; flex-wrap: wrap; align-items: center; gap: 0.1em; padding: 0.3em 0.5em; border-bottom: 0.06em solid var(--color-outline-variant, var(--color-outline)); background: var(--color-surface-container-low, var(--color-surface)); }
+.mx-tbs { width: 0.06em; height: 1.4em; margin: 0 0.3em; background: var(--color-outline-variant, var(--color-outline)); }
+.mx-rich { overflow: auto; outline: none; min-height: 12em; line-height: 1.6; }
+.mx-rich blockquote { margin: 0.4em 0; padding-inline-start: 0.8em; border-inline-start: 0.2em solid var(--color-primary); color: var(--color-on-surface-variant); }
+.mx-rich a { color: var(--color-primary); }
+.mx-chk { width: 1.1em; height: 1.1em; margin: 0 0.3em; accent-color: var(--color-primary); cursor: pointer; }
+.mx-row.sel { background: var(--color-secondary-container, var(--color-surface-container-high)); }
+.mx-bulk { display: inline-flex; align-items: center; gap: 0.2em; margin-inline-start: 0.5em; padding: 0.1em 0.5em; border-radius: var(--radius-pill, 1em); background: var(--color-surface-container-high); }

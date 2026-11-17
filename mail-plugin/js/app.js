@@ -30,7 +30,13 @@
     file: 'M7 3.5h7l4 4v13H7zM14 3.5v4h4', mail: 'M4 6h16v12H4zM4 7l8 6 8-6', pen: 'M5 19l1-4L15.5 5.5l3 3L9 18zM13.5 7.5l3 3',
     outbox: 'M12 15V4M8 8l4-4 4 4M5 13v6h14v-6', people: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3.5 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5M16 11a2.5 2.5 0 1 0 0-5M17 14c2 .4 3.3 2.2 3.6 5',
     reply: 'M10 7L5 12l5 5M5 12h9a5 5 0 0 1 5 5', fwd: 'M14 7l5 5-5 5M19 12h-9a5 5 0 0 0-5 5', close: 'M6 6l12 12M18 6L6 18',
-    clock: 'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM12 8v4l3 2', plus: 'M12 5v14M5 12h14', cloudoff: 'M4 4l16 16M7 17h10a3.5 3.5 0 0 0 1.4-6.7M9.5 6.4A5 5 0 0 1 16 9'
+    clock: 'M12 4a8 8 0 1 1 0 16 8 8 0 0 1 0-16zM12 8v4l3 2',
+    bold: 'M8 5h5a3.5 3.5 0 0 1 0 7H8zM8 12h6a3.5 3.5 0 0 1 0 7H8z', italic: 'M11 5h6M7 19h6M14 5l-4 14', under: 'M7 5v6a5 5 0 0 0 10 0V5M6 20h12', strike: 'M5 12h14M16 7.5A4 4 0 0 0 12 6c-2.5 0-4 1.2-4 3M8 16.5A4 4 0 0 0 12 18c2.5 0 4-1.2 4-3',
+    ul: 'M9 7h11M9 12h11M9 17h11M5 7h.01M5 12h.01M5 17h.01', ol: 'M10 7h10M10 12h10M10 17h10M5 6v3M4.5 15h1.5l-1.5 2.5h1.5', indent: 'M4 6h16M10 10h10M10 14h10M4 18h16M4 9.5l3 2.5-3 2.5', outdent: 'M4 6h16M10 10h10M10 14h10M4 18h16M7 9.5L4 12l3 2.5',
+    aright: 'M4 6h16M8 10h12M4 14h16M8 18h12', acenter: 'M4 6h16M6 10h12M4 14h16M6 18h12', aleft: 'M4 6h16M4 10h12M4 14h16M4 18h12', link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+    quote: 'M6 10h4v6H5v-4c0-3 1-5 3-6M15 10h4v6h-5v-4c0-3 1-5 3-6', clear: 'M6 5h12M12 5l-3 14M14 14l6 6M20 14l-6 6', undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3', redo: 'M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3',
+    rtl: 'M20 5H10a3 3 0 0 0 0 6h3M13 5v14M17 5v14M8 16H4m0 0l2-2m-2 2l2 2', ltr: 'M4 5h10a3 3 0 0 1 0 6h-3M11 5v14M7 5v14M16 16h4m0 0l-2-2m2 2l-2 2', big: 'M4 19L9 5l5 14M6 14h6M17 9v6M14 12h6', small: 'M6 19l4-11 4 11M7.5 15h5M16 12h5',
+    print: 'M7 9V4h10v5M7 17H5a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2M7 14h10v6H7z', replyall: 'M12 7L7 12l5 5M7 7l-5 5 5 5M7 12h7a5 5 0 0 1 5 5', copy: 'M8 8h11v11H8zM5 16V5h11', check: 'M5 12l5 5 9-10', seen: 'M4 6h16v12H4zM4 7l8 6 8-6M9 16l2 2 4-4', plus: 'M12 5v14M5 12h14', cloudoff: 'M4 4l16 16M7 17h10a3.5 3.5 0 0 0 1.4-6.7M9.5 6.4A5 5 0 0 1 16 9'
   };
   function ic(n) { return '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + (P[n] || P.folder) + '"/></svg>'; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -167,7 +173,8 @@
     S.msg = null;
     var from = S.total ? S.offset + 1 : 0, to = Math.min(S.offset + S.limit, S.total);
     var rows = S.items.length ? S.items.map(function (m, i) {
-      return '<div class="mx-row' + (m.seen ? '' : ' unread') + '" data-i="' + i + '">' +
+      return '<div class="mx-row' + (m.seen ? '' : ' unread') + (S.sel && S.sel[m.uid] ? ' sel' : '') + '" data-i="' + i + '">' +
+        '<input type="checkbox" class="mx-chk" data-chk="' + i + '" title="בחירה"' + (S.sel && S.sel[m.uid] ? ' checked' : '') + '>' +
         '<button class="mx-star' + (m.flagged ? ' on' : '') + '" data-star="' + i + '" title="כוכב">' + ic('starred') + '</button>' +
         '<span class="mx-from">' + esc(m.from || '(ללא שולח)') + '</span>' +
         '<span class="mx-line">' + esc(m.subject || '(ללא נושא)') + (m.preview ? '<span class="mx-prev"> — ' + esc(m.preview) + '</span>' : '') + '</span>' +
@@ -175,21 +182,37 @@
         '<span class="mx-date">' + esc(fmtDate(m.date)) + '</span></div>';
     }).join('') : '<div class="mx-state">' + (S.q ? 'לא נמצאו הודעות' : (S.live || S.acct ? 'אין הודעות שמורות בתיקייה זו' : 'עדיין לא חובר חשבון דואר')) +
       (!S.acct && S.bridge ? '<p><button class="mx-btn" id="mx-setup1">חיבור חשבון</button></p>' : '') + '</div>';
-    main('<div class="mx-bar"><button class="mx-ib" id="mx-r2" title="רענון">' + ic('refresh') + '</button>' +
+    var nsel = S.sel ? Object.keys(S.sel).length : 0;
+    main('<div class="mx-bar"><input type="checkbox" class="mx-chk" id="mx-all" title="בחירת הכול"' + (nsel && nsel === S.items.length ? ' checked' : '') + '><button class="mx-ib" id="mx-r2" title="רענון">' + ic('refresh') + '</button>' +
+      (nsel ? '<span class="mx-bulk"><b>' + nsel + ' נבחרו</b><button class="mx-ib" data-bulk="seen" title="סימון כנקרא">' + ic('seen') + '</button><button class="mx-ib" data-bulk="unseen" title="סימון כלא נקרא">' + ic('mail') + '</button><button class="mx-ib" data-bulk="star" title="הוספת כוכב">' + ic('starred') + '</button><button class="mx-ib" data-bulk="unstar" title="הסרת כוכב">' + ic('close') + '</button></span>' : '') +
       (S.q ? '<span>תוצאות עבור "' + esc(S.q) + '"' + (S.fromCache ? ' (בדואר השמור)' : '') + '</span>' : '') + '<span class="mx-sp"></span>' +
       '<span>' + from + '–' + to + ' מתוך ' + S.total + '</span>' +
       '<button class="mx-ib" id="mx-pv" title="חדשות יותר"' + (S.offset ? '' : ' disabled') + '>' + ic('prev') + '</button>' +
       '<button class="mx-ib" id="mx-nx" title="ישנות יותר"' + (to < S.total ? '' : ' disabled') + '>' + ic('next') + '</button></div>' +
       '<div class="mx-list" id="mx-list">' + rows + '</div>');
     $('mx-r2').onclick = refresh;
+    $('mx-all').onchange = function () { S.sel = {}; if (this.checked) S.items.forEach(function (m) { S.sel[m.uid] = 1; }); renderList(); };
+    document.querySelectorAll('[data-bulk]').forEach(function (b) { b.onclick = function () { bulk(b.dataset.bulk); }; });
     if ($('mx-setup1')) $('mx-setup1').onclick = setup;
     $('mx-pv').onclick = function () { S.offset = Math.max(0, S.offset - S.limit); S.q && !S.fromCache ? syncFolder() : renderCached(); };
     $('mx-nx').onclick = function () { S.offset += S.limit; S.q && !S.fromCache ? syncFolder() : renderCached(); };
     $('mx-list').onclick = function (e) {
+      var ck = e.target.closest('[data-chk]');
+      if (ck) { e.stopPropagation(); var mm = S.items[+ck.dataset.chk]; S.sel = S.sel || {}; if (ck.checked) S.sel[mm.uid] = 1; else delete S.sel[mm.uid]; renderList(); return; }
       var st = e.target.closest('[data-star]');
       if (st) { e.stopPropagation(); toggleStar(S.items[+st.dataset.star], st); return; }
       var row = e.target.closest('.mx-row'); if (row) readMsg(S.items[+row.dataset.i]);
     };
+  }
+  async function bulk(kind) {
+    if (!S.live) { toast('אפשר לסמן כשיש חיבור'); return; }
+    var list = S.items.filter(function (m) { return S.sel && S.sel[m.uid]; }), ok = 0;
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i], p = { folder: S.folder, uid: m.uid };
+      if (kind === 'seen' || kind === 'unseen') p.seen = kind === 'seen'; else p.flagged = kind === 'star';
+      try { await B.call('/mail/flag', p); if ('seen' in p) m.seen = p.seen; else m.flagged = p.flagged; DBS.put('messages', Object.assign({}, m, { key: DBS.msgKey(S.folder, m.uid), folder: S.folder })); ok++; } catch (e) {}
+    }
+    S.sel = {}; toast('עודכנו ' + ok + ' הודעות'); renderList(); renderSide();
   }
   async function toggleStar(m, el) {
     if (!S.live) { toast('אפשר לסמן בכוכב כשיש חיבור'); return; }
@@ -274,7 +297,9 @@
     if (d.html) { var c = cleanHtml(d.html, allowImages); blocked = c.blocked; body = '<iframe class="mx-frame" id="mx-frame" sandbox="allow-popups allow-popups-to-escape-sandbox"></iframe>'; S._src = c.html; }
     else body = '<div class="mx-text">' + esc(d.text || '') + '</div>';
     main('<div class="mx-bar"><button class="mx-ib" id="mx-back" title="חזרה לרשימה">' + ic('back') + '</button><span class="mx-sp"></span>' +
-      '<button class="mx-ib" id="mx-reply" title="תשובה">' + ic('reply') + '</button><button class="mx-ib" id="mx-fwd" title="העברה">' + ic('fwd') + '</button>' +
+      '<button class="mx-ib" id="mx-newer" title="הודעה חדשה יותר (K)">' + ic('prev') + '</button><button class="mx-ib" id="mx-older" title="הודעה ישנה יותר (J)">' + ic('next') + '</button><span class="mx-tbs"></span>' +
+      '<button class="mx-ib" id="mx-reply" title="תשובה (R)">' + ic('reply') + '</button><button class="mx-ib" id="mx-replyall" title="תשובה לכולם (A)">' + ic('replyall') + '</button><button class="mx-ib" id="mx-fwd" title="העברה (F)">' + ic('fwd') + '</button><span class="mx-tbs"></span>' +
+      '<button class="mx-ib" id="mx-zin" title="הגדלת הטקסט">' + ic('big') + '</button><button class="mx-ib" id="mx-zout" title="הקטנת הטקסט">' + ic('small') + '</button><button class="mx-ib" id="mx-copy" title="העתקת הטקסט">' + ic('copy') + '</button><button class="mx-ib" id="mx-print" title="הדפסה">' + ic('print') + '</button>' +
       '<button class="mx-ib" id="mx-unread" title="סימון כלא נקרא">' + ic('mail') + '</button></div>' +
       '<div class="mx-read"><h1>' + esc(d.subject || '(ללא נושא)') + '</h1>' +
       '<div class="mx-hdr"><div class="mx-ava">' + esc(who.trim().charAt(0) || '?') + '</div><div class="mx-who"><b>' + esc(who) + '</b> ' +
@@ -290,6 +315,16 @@
     $('mx-back').onclick = function () { S.msg = null; renderCached(); };
     $('mx-reply').onclick = function () { compose(replyDraft(d, false)); };
     $('mx-fwd').onclick = function () { compose(replyDraft(d, true)); };
+    $('mx-replyall').onclick = function () { var r = replyDraft(d, false), me = (S.acct && S.acct.email || '').toLowerCase(); r.cc = [d.to, d.cc].filter(Boolean).join(', ').split(/,\s*/).filter(function (x) { return x && x.toLowerCase().indexOf(me || '\u0000') < 0; }).join(', '); compose(r); };
+    var idx = S.items.findIndex(function (x) { return x.uid === m.uid; });
+    $('mx-newer').disabled = idx <= 0; $('mx-older').disabled = idx < 0 || idx >= S.items.length - 1;
+    $('mx-newer').onclick = function () { if (idx > 0) readMsg(S.items[idx - 1]); };
+    $('mx-older').onclick = function () { if (idx >= 0 && idx < S.items.length - 1) readMsg(S.items[idx + 1]); };
+    var zoom = function (k) { S.zoom = Math.max(.7, Math.min(2, (S.zoom || 1) + k)); save('mx.zoom', S.zoom); var rd = document.querySelector('.mx-read'); if (rd) rd.style.fontSize = S.zoom + 'em'; var f = $('mx-frame'); if (f && f.contentDocument) f.contentDocument.body.style.zoom = S.zoom; };
+    S.zoom = S.zoom || load('mx.zoom', 1); zoom(0);
+    $('mx-zin').onclick = function () { zoom(.1); }; $('mx-zout').onclick = function () { zoom(-.1); };
+    $('mx-copy').onclick = function () { try { navigator.clipboard.writeText(d.text || (fr && fr.contentDocument ? fr.contentDocument.body.innerText : '')); toast('הטקסט הועתק'); } catch (e) { toast('ההעתקה נכשלה'); } };
+    $('mx-print').onclick = function () { var w = fr && fr.contentWindow; try { if (w) w.print(); else window.print(); } catch (e) { window.print(); } };
     $('mx-addc').onclick = function () { editContact({ name: d.from, emails: [d.fromAddress].filter(Boolean), phones: [] }); };
     $('mx-unread').onclick = async function () {
       if (!S.live) { toast('אפשר לסמן כלא נקרא כשיש חיבור'); return; }
@@ -345,7 +380,8 @@
       '<input class="mx-c-f" id="mx-c-cc" list="mx-dl" placeholder="עותק" dir="auto" value="' + esc(draft.cc) + '">' +
       '<input class="mx-c-f" id="mx-c-bcc" list="mx-dl" placeholder="עותק מוסתר" dir="auto" value="' + esc(draft.bcc) + '">' +
       '<input class="mx-c-f" id="mx-c-subj" placeholder="נושא" dir="auto" value="' + esc(draft.subject) + '">' +
-      '<textarea class="mx-c-body" id="mx-c-body" dir="auto">' + esc(draft.text) + '</textarea>' +
+      '<div class="mx-tb" id="mx-tb" role="toolbar" aria-label="עיצוב טקסט">' + [['bold','bold','מודגש (Ctrl+B)'],['italic','italic','נטוי (Ctrl+I)'],['underline','under','קו תחתון (Ctrl+U)'],['strikeThrough','strike','קו חוצה'],'|',['big','big','גופן גדול'],['small','small','גופן קטן'],'|',['insertUnorderedList','ul','רשימת תבליטים'],['insertOrderedList','ol','רשימה ממוספרת'],['outdent','outdent','הקטנת הזחה'],['indent','indent','הגדלת הזחה'],'|',['justifyRight','aright','יישור לימין'],['justifyCenter','acenter','מרכוז'],['justifyLeft','aleft','יישור לשמאל'],['rtl','rtl','כיוון מימין לשמאל'],['ltr','ltr','כיוון משמאל לימין'],'|',['link','link','קישור'],['quote','quote','ציטוט'],['removeFormat','clear','ניקוי עיצוב'],'|',['undo','undo','ביטול (Ctrl+Z)'],['redo','redo','חזרה (Ctrl+Y)']].map(function (b) { return b === '|' ? '<span class="mx-tbs"></span>' : '<button type="button" class="mx-ib sm" data-cmd="' + b[0] + '" title="' + b[2] + '" aria-label="' + b[2] + '">' + ic(b[1]) + '</button>'; }).join('') + '</div>' +
+      '<div class="mx-c-body mx-rich" id="mx-c-body" contenteditable="true" dir="auto" role="textbox" aria-multiline="true" aria-label="תוכן ההודעה">' + (draft.html || esc(draft.text).replace(/\n/g, '<br>')) + '</div>' +
       '<div class="mx-c-atts" id="mx-c-atts"></div>' +
       '<div class="mx-c-foot"><button class="mx-btn" id="mx-c-send">שליחה</button>' +
       '<label class="mx-btn tx" title="תזמון שליחה">' + ic('clock') + '<input type="datetime-local" id="mx-c-at" value="' + esc(draft.sendAt) + '"></label>' +
@@ -354,6 +390,16 @@
       '<button class="mx-ib" id="mx-c-del" title="מחיקת הטיוטה">' + ic('trash') + '</button></div>';
     fillContactsList();
     renderCmpAtts();
+    $('mx-tb').addEventListener('mousedown', function (e) { if (e.target.closest('[data-cmd]')) e.preventDefault(); });
+    $('mx-tb').onclick = function (e) {
+      var b = e.target.closest('[data-cmd]'); if (!b) return; var c = b.dataset.cmd, ed = $('mx-c-body'); ed.focus();
+      if (c === 'link') { var u = prompt('כתובת הקישור', 'https://'); if (u) document.execCommand('createLink', false, u); }
+      else if (c === 'quote') document.execCommand('formatBlock', false, 'blockquote');
+      else if (c === 'big' || c === 'small') document.execCommand('fontSize', false, c === 'big' ? '5' : '2');
+      else if (c === 'rtl' || c === 'ltr') { var sel = getSelection(), n = sel.anchorNode; while (n && n !== ed && !/^(P|DIV|LI|BLOCKQUOTE)$/.test(n.nodeName)) n = n.parentNode; (n && n !== ed ? n : ed).setAttribute('dir', c); }
+      else document.execCommand(c, false, null);
+      ed.dispatchEvent(new Event('input'));
+    };
     ['mx-c-to', 'mx-c-cc', 'mx-c-bcc', 'mx-c-subj', 'mx-c-body', 'mx-c-at'].forEach(function (id) {
       $(id).addEventListener('input', function () { clearTimeout(cmpTimer); cmpTimer = setTimeout(saveDraft, 1200); $('mx-c-saved').textContent = ''; });
     });
@@ -379,7 +425,7 @@
   }
   function readCompose() {
     CMP.to = $('mx-c-to').value.trim(); CMP.cc = $('mx-c-cc').value.trim(); CMP.bcc = $('mx-c-bcc').value.trim();
-    CMP.subject = $('mx-c-subj').value; CMP.text = $('mx-c-body').value; CMP.sendAt = $('mx-c-at').value; CMP.updated = new Date().toISOString();
+    CMP.subject = $('mx-c-subj').value; CMP.text = $('mx-c-body').innerText; CMP.html = $('mx-c-body').innerHTML; CMP.sendAt = $('mx-c-at').value; CMP.updated = new Date().toISOString();
   }
   async function saveDraft() {
     if (!CMP || $('mx-compose').hidden) return;
@@ -395,7 +441,8 @@
     if (!validAddrs(CMP.to) || !validAddrs(CMP.cc) || !validAddrs(CMP.bcc)) { toast('אחת הכתובות אינה תקינה'); return; }
     var at = CMP.sendAt ? new Date(CMP.sendAt) : null;
     if (at && isNaN(at)) at = null;
-    var payload = { id: CMP.id, to: CMP.to, cc: CMP.cc, bcc: CMP.bcc, subject: CMP.subject, text: CMP.text, attachments: CMP.attachments, inReplyTo: CMP.inReplyTo || '', references: CMP.references || '' };
+    var rich = /<(b|i|u|s|strike|strong|em|ul|ol|blockquote|a|font)\b|dir=|align=|style=/i.test(CMP.html || '');
+    var payload = { id: CMP.id, to: CMP.to, cc: CMP.cc, bcc: CMP.bcc, subject: CMP.subject, text: CMP.text, html: rich ? '<div dir="rtl" style="font-family:Arial,sans-serif">' + CMP.html + '</div>' : '', attachments: CMP.attachments, inReplyTo: CMP.inReplyTo || '', references: CMP.references || '' };
     if (at && at > new Date()) payload.sendAt = at.toISOString();
     rememberRecipients(CMP);
     var item = Object.assign({}, payload, { queuedAt: new Date().toISOString() });
@@ -703,3 +750,20 @@
     window.Otzaria.on('theme.changed', applyTheme);
   } else state('התוסף פועל רק בתוך אוצריא.');
 })();
+
+/* קיצורי מקלדת (1.1.0): C כתיבה · R תשובה · A תשובה לכולם · F העברה · J/K הודעה ישנה/חדשה · / חיפוש · Esc חזרה · Ctrl+Enter שליחה */
+document.addEventListener('keydown', function (e) {
+  var t = e.target, typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  var $ = function (id) { return document.getElementById(id); }, click = function (id) { var b = $(id); if (b && !b.disabled) { e.preventDefault(); b.click(); } };
+  if (e.ctrlKey && e.key === 'Enter' && $('mx-c-send')) return click('mx-c-send');
+  if (typing || e.ctrlKey || e.altKey || e.metaKey) return;
+  var k = e.key.toLowerCase();
+  if (k === 'c' || k === 'ב') click('mx-compose-btn');
+  else if (k === 'r' || k === 'ר') click('mx-reply');
+  else if (k === 'a' || k === 'ש') click('mx-replyall');
+  else if (k === 'f' || k === 'כ') click('mx-fwd');
+  else if (k === 'j' || k === 'ח') click('mx-older');
+  else if (k === 'k' || k === 'ל') click('mx-newer');
+  else if (k === '/') { e.preventDefault(); var q = $('mx-q'); if (q) q.focus(); }
+  else if (k === 'escape') { if ($('mx-compose') && !$('mx-compose').hidden) click('mx-c-x'); else click('mx-back'); }
+});
