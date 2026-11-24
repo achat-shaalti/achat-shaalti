@@ -190,16 +190,30 @@ end;
 
 // ---- הסרה: מחייבת את סיסמת הנעילה, כדי שהסרה מ"אפליקציות מותקנות" לא תעקוף את הנעילה ----
 
+var
+  LastRc: Integer;
+
+// קוד יציאה: 0 הצלחה, 3 נדרשת סיסמה, אחר = כשל שאינו קשור לסיסמה (ההודעה נשמרת בקובץ זמני)
 function RunUninstall(const Password: String): Boolean;
 var
-  rc: Integer;
   exe, args: String;
 begin
   exe := ExpandConstant('{app}\OtzariaBridge.exe');
   args := '--uninstall';
   if Password <> '' then
     args := args + ' --password "' + Password + '"';
-  Result := Exec(exe, args, '', SW_HIDE, ewWaitUntilTerminated, rc) and (rc = 0);
+  if not Exec(exe, args, '', SW_HIDE, ewWaitUntilTerminated, LastRc) then
+    LastRc := 0; // אין exe להריץ (התקנה חלקית): ממשיכים להסרת הקבצים
+  Result := LastRc = 0;
+end;
+
+function LastError(): String;
+var
+  s: AnsiString;
+begin
+  Result := '';
+  if LoadStringFromFile(AddBackslash(GetEnv('TEMP')) + 'otzaria-bridge-uninstall.txt', s) then
+    Result := String(s);
 end;
 
 function AskPassword(var Password: String): Boolean;
@@ -253,6 +267,12 @@ var
 begin
   // בלי סיסמת נעילה ההסרה עוברת מיד; אחרת מבקשים סיסמה (עד 5 ניסיונות)
   Result := RunUninstall('');
+  if (not Result) and (LastRc <> 3) then
+  begin
+    // אין סיסמה מוגדרת — הכשל אינו סיסמה; מציגים את הסיבה ולא מבקשים סיסמה
+    Result := MsgBox('ההסרה נכשלה: ' + LastError() + #13#10#13#10 + 'להמשיך ולהסיר את הקבצים בכל זאת?', mbError, MB_YESNO) = IDYES;
+    Exit;
+  end;
   tries := 0;
   while (not Result) and (tries < 5) do
   begin

@@ -23,7 +23,22 @@
     var html = K ? K.card(progs, found, auto) : '';
     html += '<div class="card"><div class="setting-row"><div class="setting-text"><b>זיהוי אוטומטי של תוכנות תורניות</b><span class="muted">אוצר החכמה, בר אילן, כתבי הקודש, חבורתא, הנקדן, עדכוני אוצריא, עדכון ספרים אישיים ו-Word שנמצאים במחשב נוספים לרשימה מעצמם</span></div>' +
       ui.switchHtml('sw-auto', auto, 'זיהוי אוטומטי') + '</div></div>';
+    var wr = !!r.allowWritable;
+    html += '<div class="card"><div class="setting-row"><div class="setting-text"><b>תוכנות שמותקנות בתיקיית המשתמש</b><span class="muted">יש תוכנות (למשל כתבי הקודש) שמותקנות ב-AppData בלי אפשרות לבחור מיקום. ' +
+      'כשהמתג דלוק — אפשר להוסיף אותן ולזהות אותן אוטומטית. הקובץ ננעץ (טביעה ומפרסם) ונבדק בכל פתיחה, אבל תיקייה שהמשתמש יכול לכתוב אליה פחות מוגנת מ-Program Files.</span></div>' +
+      ui.switchHtml('sw-writable', wr, 'תוכנות בתיקיית המשתמש') + '</div></div>';
     body.innerHTML = html;
+    body.querySelector('#sw-writable').addEventListener('click', async function () {
+      var ok = await ui.dialog({
+        title: wr ? 'רק תוכנות בתיקייה מוגנת' : 'לאפשר תוכנות בתיקיית המשתמש', icon: 'computer',
+        body: '<p>' + (wr ? 'תוכנות חדשות יתקבלו רק מתיקייה שרק מנהל יכול לכתוב אליה (Program Files). תוכנות שכבר ברשימה יישארו.' : 'תוכנות שמותקנות בתיקיית המשתמש (כמו כתבי הקודש) יתקבלו לרשימה ולזיהוי האוטומטי. הקובץ ייבדק בכל פתיחה מול הטביעה שנשמרה.') + '</p>',
+        fields: [{ name: 'pw', label: 'סיסמת נעילה', type: 'password', dir: 'ltr' }],
+        actions: [{ label: 'ביטול', value: false }, { label: wr ? 'כיבוי' : 'הדלקה', value: true, kind: 'primary' }],
+        validate: function (x) { return x.pw ? '' : 'יש להקליד את סיסמת הנעילה'; },
+        onSubmit: async function (x) { await SS.bridge.call('/kiosk/programs/writable', { password: x.pw, enabled: !wr }, { timeoutMs: 30000 }); return true; }
+      });
+      if (ok) { ui.toast('נשמר', 'success'); load(body); }
+    });
     body.querySelector('#sw-auto').addEventListener('click', function () { if (SS.kioskToggleAuto) SS.kioskToggleAuto(body, auto, load); });
     function on(act, fn) { var b = body.querySelector('[data-act="' + act + '"]'); if (b) b.addEventListener('click', fn); }
     if (!K) return;
