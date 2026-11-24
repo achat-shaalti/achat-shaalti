@@ -105,8 +105,11 @@
     if (!FB.crashEnabled()) return;
     var q = qGet(), key = String(msg).slice(0, 160);
     if (q.some(function (x) { return x.key === key; })) return;
-    q.push({ key: key, at: new Date().toISOString(), text: scrub(msg + (stack ? '\n' + stack : '')) });
+    var item = { key: key, at: new Date().toISOString(), text: scrub(msg + (stack ? '\n' + stack : '')) };
+    q.push(item);
     qSet(q);
+    /* 11.2026: כל קריסה נשמרת מיד גם בגשר (תור קבוע בדיסק → GitHub), כי דיווחי אוצריא על תוסף שלא מהחנות לא תמיד מגיעים */
+    if (FB.bridge && FB.boot) toGithub(FB.bridge, 'דיווח קריסה: ' + FB.boot.plugin + ' ' + (FB.boot.version || '') + '\n[' + item.at + ']\n' + item.text, FB.boot);
   }
   FB.watchErrors = function () {
     if (FB._watching) return;
@@ -116,6 +119,7 @@
   };
   /* opts: { plugin, version, restore, bridge } — לקרוא מתוך plugin.boot */
   FB.reportCrashes = async function (opts) {
+    if (opts) { FB.bridge = opts.bridge || FB.bridge; FB.boot = opts; }
     if (!window.Otzaria || FB._crashAsked || !FB.crashEnabled()) return;
     var crashed = !!(opts && opts.restore && opts.restore.reason === 'crashed');
     var q = qGet();

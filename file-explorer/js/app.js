@@ -1116,6 +1116,7 @@
       '</div>';
     if (id === 'general') return '<div class="fx-set-card"><div class="fx-set-title">' + ic('settings') + 'כללי</div>' +
       setRow('שפת הממשק', 'אוטומטי = לפי השפה של אוצריא', seg('lang', pref, [['auto', 'אוטומטי'], ['he', 'עברית'], ['en', 'English']])) +
+      setRow('מסך פתיחה', 'הסמל בגדול לשנייה בפתיחת הסייר', seg('splash', (function () { try { return localStorage.getItem('hb.splash') === 'false' ? 'off' : 'on'; } catch (e) { return 'on'; } })(), [['on', 'מוצג'], ['off', 'כבוי']])) +
       setRow('שליחת הערה או דיווח על תקלה', '', '<button type="button" class="btn btn-tonal" data-act="fb">שליחת הערה</button>') +
       setRow('איפוס הגדרות הסייר', 'מחזיר את כל ההגדרות שבמסך הזה לברירת המחדל', '<button type="button" class="btn btn-tonal" data-act="reset">איפוס</button>') +
       '</div>';
@@ -1235,6 +1236,7 @@
         if (name === 'zoom') FX.layout.setZoom(parseFloat(v) || 0.9);
         else if (name === 'mode') FX.layout.setMode(v);
         else if (name === 'lang') { if (window.I18N) window.I18N.set(v); }
+        else if (name === 'splash') { try { localStorage.setItem('hb.splash', v === 'off' ? 'false' : 'true'); } catch (e) { /* כלום */ } }
         else { var o = opts(); o[name] = v; saveOpts(o); }
       }
     });

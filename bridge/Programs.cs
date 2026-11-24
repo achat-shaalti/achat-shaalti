@@ -18,6 +18,7 @@ public static class Programs
 {
     private const string Key = "kiosk.programs";
     private const string AutoKey = "kiosk.autoTorahPrograms";
+    private const string WritableKey = "kiosk.allowWritablePrograms";
     private const string KeywordsKey = "kiosk.autoTorahKeywords";
     internal const int MaxPrograms = 20;
     private const int GraceSeconds = 30;   // [w3] רק ל-GrantForegroundGrace (Hello/סייר), לא ל-Activate
@@ -92,6 +93,11 @@ public static class Programs
     // כשרכיב ההקשחה מותקן, הרשימה והגדרות הזיהוי האוטומטי נקראות מהעותק שלו (config.json כתיב למשתמש המחובר);
     // אחרת — מ-config.json כמו תמיד. ראו HardLock.Policy
     public static bool AutoEnabled => HardLock.Policy?.AutoTorah ?? Config.Get(AutoKey, true);
+    /// <summary>
+    /// הגדרה (כבויה כברירת מחדל): לאפשר תוכנה שמותקנת בתיקייה כתיבה למשתמש (כתבי הקודש מותקנת ב-AppData בלי בחירת מיקום).
+    /// WHY: הקובץ ננעץ (SHA/מפרסם) ונבדק בכל הפעלה, אבל DLL side-loading מהתיקייה לא נחסם — לכן זו בחירה מפורשת של המנהל.
+    /// </summary>
+    public static bool AllowWritable => HardLock.Policy?.AllowWritable ?? Config.Get(WritableKey, false);
 
     private static string[] Keywords => HardLock.Policy?.AutoTorahKeywords ?? Config.GetList(KeywordsKey);
 
@@ -105,6 +111,7 @@ public static class Programs
         Server.Route("/kiosk/programs/remove", Remove);
         Server.Route("/kiosk/programs/detect", _ => Detect());
         Server.Route("/kiosk/programs/auto", SetAuto);
+        Server.Route("/kiosk/programs/writable", SetWritable);
     }
 
     // ---------- אחסון ----------
@@ -161,7 +168,7 @@ public static class Programs
         // בגללן ("רשומת תוכנה אינה תקינה"), ואז אי אפשר להסיר אף תוכנה. מנקים אותן בכל שמירה.
         int dropped = list.RemoveAll(e => !System.IO.Path.IsPathFullyQualified(e.Path ?? "") || !(e.Path ?? "").EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
         if (dropped > 0) Config.Log("programs: הוסרו " + dropped + " רשומות ישנות עם נתיב לא תקין");
-        if (HardLock.Available) HardLock.SetPrograms(password, ToJson(list), AutoEnabled, Keywords);
+        if (HardLock.Available) HardLock.SetPrograms(password, ToJson(list), AutoEnabled, Keywords, AllowWritable);
         Config.Set(Key, ToJson(list));
         Config.Save();
     }
@@ -173,7 +180,7 @@ public static class Programs
     {
         var pol = HardLock.Policy;
         if (pol == null || pol.Programs != null) return;
-        HardLock.SetPrograms(password, ToJson(LoadManual()), AutoEnabled, Keywords);
+        HardLock.SetPrograms(password, ToJson(LoadManual()), AutoEnabled, Keywords, AllowWritable);
     }
 
     private static string[] ProcNames(Entry e) =>
@@ -230,6 +237,7 @@ public static class Programs
         return new
         {
             autoTorah = AutoEnabled,
+            allowWritable = AllowWritable,
             programs = all.Select(e => new
             {
                 id = e.Id,
@@ -244,10 +252,23 @@ public static class Programs
         };
     }
 
+    /// <summary>הגדרה בסיסמה: לאפשר תוכנות בתיקייה כתיבה למשתמש (ר' AllowWritable)</summary>
+    private static object SetWritable(JsonElement b)
+    {
+        Kiosk.RequirePassword(b.Str("password"));
+        bool on = b.Bool("enabled");
+        if (HardLock.Available) HardLock.SetPrograms(b.Str("password"), ToJson(LoadManual()), AutoEnabled, Keywords, on);
+        Config.Set(WritableKey, JsonValue.Create(on));
+        Config.Save();
+        Config.Log("programs: allowWritable=" + on);
+        lock (AutoGate) { _autoAt = DateTime.MinValue; _knownAtTrusted = DateTime.MinValue; }
+        return ListResult();
+    }
+
     private static object SetAuto(JsonElement b)
     {
         Kiosk.RequirePassword(b.Str("password"));
-        if (HardLock.Available) HardLock.SetPrograms(b.Str("password"), ToJson(LoadManual()), b.Bool("enabled"), Keywords);
+        if (HardLock.Available) HardLock.SetPrograms(b.Str("password"), ToJson(LoadManual()), b.Bool("enabled"), Keywords, AllowWritable);
         Config.Set(AutoKey, JsonValue.Create(b.Bool("enabled")));
         Config.Save();
         lock (AutoGate) _autoAt = DateTime.MinValue; // סריקה מחדש
@@ -512,7 +533,7 @@ public static class Programs
             // [r1] תוכנה חדשה: מיקום קבוע שרק מנהל כותב אליו (קובץ + כל תיקיות האב), לא נעיצת SHA בלבד — אחרת אפשר להחליף את
             // הקובץ/התיקיה/ספריות שלה (DLL side-loading). alias של כלי החיתוך מומר לאפליקציית חבילה במקום
             if (IsSnipAlias(path)) { path = SnipPfnPath; shellApp = true; }
-            else if (!AppTrust.IsAdminOnlyLocation(path))
+            else if (!AppTrust.IsAdminOnlyLocation(path) && !AllowWritable)
                 throw BridgeException.Forbidden("התוכנה חייבת להיות מותקנת במיקום שרק מנהל יכול לכתוב אליו (למשל Program Files). יש להתקין אותה שם או להקשיח את הרשאות התיקיה");
         }
         else if (string.IsNullOrWhiteSpace(b.Str("procs")))
@@ -775,7 +796,7 @@ public static class Programs
                 try
                 {
                     hit = trustedOnly
-                        ? k.Candidates().FirstOrDefault(c => File.Exists(c) && AppTrust.IsTrustedLocation(c))
+                        ? k.Candidates().FirstOrDefault(c => File.Exists(c) && (AllowWritable || AppTrust.IsTrustedLocation(c)))
                         : k.Candidates().FirstOrDefault(File.Exists);
                 }
                 catch { }
@@ -851,7 +872,7 @@ public static class Programs
 
     /// <summary>[w3] האם נתיב שנמצא בזיהוי האוטומטי ראוי להתקבל (מיקום קבוע לא-כתיב, לא חסום)</summary>
     internal static bool AutoCandidateOk(string path, AppTrust.ITrustEnv env) =>
-        !string.IsNullOrEmpty(path) && !Blocked.Contains(System.IO.Path.GetFileNameWithoutExtension(path)) && env.IsTrustedLocation(path);
+        !string.IsNullOrEmpty(path) && !Blocked.Contains(System.IO.Path.GetFileNameWithoutExtension(path)) && (env.IsTrustedLocation(path) || AllowWritable);
 
     private static List<Entry> DetectAuto()
     {
@@ -900,7 +921,9 @@ public static class Programs
         if (!AutoCandidateOk(path, AppTrust.Env)) return;   // [w3] גם נתיב שמגיע מהרישום חייב להיות במיקום קבוע לא-כתיב
         if (list.Any(x => x.Path.Equals(path, StringComparison.OrdinalIgnoreCase))) return;
         string hash = Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(path.ToLowerInvariant()))).Substring(0, 8).ToLowerInvariant();
-        list.Add(new Entry { Id = "auto-" + hash, Name = name, Path = path, Procs = procs, Auto = true });
+        // במיקום כתיב (רק כשהמנהל אישר AllowWritable): נעיצה בזמן הזיהוי, ונבדקת בכל הפעלה
+        var pin = AppTrust.Env.IsTrustedLocation(path) ? ("", "") : AppTrust.CreatePin(path);
+        list.Add(new Entry { Id = "auto-" + hash, Name = name, Path = path, Procs = procs, Auto = true, Sha256 = pin.Item1, Signer = pin.Item2 });
     }
 
     /// <summary>קובץ ההפעלה של תוכנה מותקנת: לפי DisplayIcon, ואם אין — קובץ exe הגדול בתיקיית ההתקנה</summary>
