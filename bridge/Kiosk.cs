@@ -33,8 +33,6 @@ public static partial class Kiosk
     /// </summary>
     internal static bool SafeBoot;
     // כשהשירות מחזיק את הסיסמה אין עותק מקומי (ר' PurgeLocalPassword), ולכן "יש סיסמה" כולל גם את השירות
-    /// <summary>יש סיסמת נעילה (בגשר או ברכיב ההקשחה) — ההסרה מבקשת סיסמה רק אז</summary>
-    internal static bool PasswordConfigured => HasPassword;
     private static bool HasPassword => !string.IsNullOrEmpty(Config.Get<string>("kiosk.passwordHash", null)) || HardLock.Available;
     internal const int MinPasswordLength = 10;
 
