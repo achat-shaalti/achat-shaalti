@@ -141,6 +141,28 @@
     await renderCached();
     if (S.live) syncFolder(false);
   }
+  /* מיון וסינון של רשימת ההודעות (נשמר בדפדפן) */
+  var LS = { get: function (k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }, set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) { /* */ } } };
+  S.ms = LS.get('mx.sort', 'new'); S.mf = LS.get('mx.filter', 'all');
+  var nameOf = function (m) { return String(m.from || m.fromAddress || '').replace(/^["'\s]+/, ''); };
+  function sortFilter(all) {
+    if (S.mf === 'unread') all = all.filter(function (m) { return !m.seen; });
+    else if (S.mf === 'flagged') all = all.filter(function (m) { return m.flagged; });
+    else if (S.mf === 'attach') all = all.filter(function (m) { return m.attach; });
+    var by = {
+      old: function (a, b) { return a.uid - b.uid; },
+      from: function (a, b) { return nameOf(a).localeCompare(nameOf(b), 'he') || b.uid - a.uid; },
+      fromz: function (a, b) { return nameOf(b).localeCompare(nameOf(a), 'he') || b.uid - a.uid; },
+      subject: function (a, b) { return String(a.subject || '').localeCompare(String(b.subject || ''), 'he') || b.uid - a.uid; },
+      unread: function (a, b) { return (a.seen ? 1 : 0) - (b.seen ? 1 : 0) || b.uid - a.uid; }
+    }[S.ms];
+    return by ? all.slice().sort(by) : all;
+  }
+  function sortBar() {
+    var o = function (v, t, cur) { return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + t + '</option>'; };
+    return '<select class="mx-c-f mx-sel" id="mx-sort" title="מיון">' + o('new', 'חדשות קודם', S.ms) + o('old', 'ישנות קודם', S.ms) + o('from', 'שולח א–ת', S.ms) + o('fromz', 'שולח ת–א', S.ms) + o('subject', 'נושא א–ת', S.ms) + o('unread', 'לא נקראו קודם', S.ms) + '</select>' +
+      '<select class="mx-c-f mx-sel" id="mx-filt" title="סינון">' + o('all', 'כל ההודעות', S.mf) + o('unread', 'לא נקראו', S.mf) + o('flagged', 'עם כוכב', S.mf) + o('attach', 'עם קובץ מצורף', S.mf) + '</select>';
+  }
   async function renderCached() {
     var all = [];
     try { all = await DBS.list(S.folder); } catch (e) { all = []; }
@@ -148,6 +170,7 @@
       var q = S.q.toLowerCase();
       all = all.filter(function (m) { return [m.from, m.subject, m.preview, m.text].some(function (x) { return x && String(x).toLowerCase().indexOf(q) >= 0; }); });
     }
+    all = sortFilter(all);
     S.total = all.length; S.items = all.slice(S.offset, S.offset + S.limit);
     S.fromCache = true;
     renderList();
@@ -185,12 +208,13 @@
     var nsel = S.sel ? Object.keys(S.sel).length : 0;
     main('<div class="mx-bar"><input type="checkbox" class="mx-chk" id="mx-all" title="בחירת הכול"' + (nsel && nsel === S.items.length ? ' checked' : '') + '><button class="mx-ib" id="mx-r2" title="רענון">' + ic('refresh') + '</button>' +
       (nsel ? '<span class="mx-bulk"><b>' + nsel + ' נבחרו</b><button class="mx-ib" data-bulk="seen" title="סימון כנקרא">' + ic('seen') + '</button><button class="mx-ib" data-bulk="unseen" title="סימון כלא נקרא">' + ic('mail') + '</button><button class="mx-ib" data-bulk="star" title="הוספת כוכב">' + ic('starred') + '</button><button class="mx-ib" data-bulk="unstar" title="הסרת כוכב">' + ic('close') + '</button></span>' : '') +
-      (S.q ? '<span>תוצאות עבור "' + esc(S.q) + '"' + (S.fromCache ? ' (בדואר השמור)' : '') + '</span>' : '') + '<span class="mx-sp"></span>' +
+      (S.q ? '<span>תוצאות עבור "' + esc(S.q) + '"' + (S.fromCache ? ' (בדואר השמור)' : '') + '</span>' : '') + (S.fromCache ? sortBar() : '') + '<span class="mx-sp"></span>' +
       '<span>' + from + '–' + to + ' מתוך ' + S.total + '</span>' +
       '<button class="mx-ib" id="mx-pv" title="חדשות יותר"' + (S.offset ? '' : ' disabled') + '>' + ic('prev') + '</button>' +
       '<button class="mx-ib" id="mx-nx" title="ישנות יותר"' + (to < S.total ? '' : ' disabled') + '>' + ic('next') + '</button></div>' +
       '<div class="mx-list" id="mx-list">' + rows + '</div>');
     $('mx-r2').onclick = refresh;
+    if ($('mx-sort')) { $('mx-sort').onchange = function () { S.ms = this.value; LS.set('mx.sort', S.ms); S.offset = 0; renderCached(); }; $('mx-filt').onchange = function () { S.mf = this.value; LS.set('mx.filter', S.mf); S.offset = 0; renderCached(); }; }
     $('mx-all').onchange = function () { S.sel = {}; if (this.checked) S.items.forEach(function (m) { S.sel[m.uid] = 1; }); renderList(); };
     document.querySelectorAll('[data-bulk]').forEach(function (b) { b.onclick = function () { bulk(b.dataset.bulk); }; });
     if ($('mx-setup1')) $('mx-setup1').onclick = setup;
@@ -529,11 +553,20 @@
     S.view = 'contacts'; S.msg = null; renderSide();
     await loadContacts();
     var list = S.contacts;
+    var cKey = function (c) { return String(S.cSort === 'email' ? (c.emails || [''])[0] : S.cSort === 'org' ? (c.org || '') : (c.name || (c.emails || [''])[0] || '')).trim(); };
+    if (S.cSort && S.cSort !== 'name') list = list.slice().sort(function (a, b) { return cKey(a).localeCompare(cKey(b), 'he'); });
+    var letters = []; list.forEach(function (c) { var ch = cKey(c).charAt(0).toUpperCase(); if (ch && letters.indexOf(ch) < 0) letters.push(ch); });
+    letters.sort(function (a, b) { return a.localeCompare(b, 'he'); });
+    if (S.cLetter) list = list.filter(function (c) { return cKey(c).charAt(0).toUpperCase() === S.cLetter; });
     if (q) { var s = q.toLowerCase(); list = list.filter(function (c) { return [c.name, c.org].concat(c.emails || [], c.phones || []).some(function (x) { return x && String(x).toLowerCase().indexOf(s) >= 0; }); }); }
     main('<div class="mx-bar"><input class="mx-c-f mx-csearch" id="mx-cq" placeholder="חיפוש באנשי הקשר" value="' + esc(q || '') + '"><span class="mx-sp"></span>' +
       '<button class="mx-btn sm" id="mx-cadd">' + ic('plus') + 'איש קשר</button>' +
       '<label class="mx-btn tx sm">ייבוא (vCard / CSV)<input type="file" id="mx-cimp" accept=".vcf,.csv,text/vcard,text/csv" hidden></label>' +
       '<button class="mx-btn tx sm" id="mx-cexp">ייצוא</button></div>' +
+      '<div class="mx-bar mx-abc"><select class="mx-c-f mx-sel" id="mx-csort" title="מיון">' +
+        [['name', 'לפי שם'], ['email', 'לפי כתובת'], ['org', 'לפי ארגון']].map(function (x) { return '<option value="' + x[0] + '"' + ((S.cSort || 'name') === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select>' +
+        '<button class="mx-btn tx sm' + (S.cLetter ? '' : ' on') + '" data-abc="">הכול</button>' +
+        letters.map(function (l) { return '<button class="mx-btn tx sm' + (S.cLetter === l ? ' on' : '') + '" data-abc="' + esc(l) + '">' + esc(l) + '</button>'; }).join('') + '</div>' +
       '<div class="mx-list">' + (list.length ? list.map(function (c, i) {
         return '<div class="mx-row mx-crow" data-i="' + i + '"><span class="mx-ava sm">' + esc((c.name || (c.emails || [''])[0] || '?').trim().charAt(0)) + '</span><span class="mx-from">' + esc(c.name || '') + '</span>' +
           '<span class="mx-line">' + esc((c.emails || []).join(', ')) + '<span class="mx-prev">' + ((c.phones || []).length ? ' · ' + esc(c.phones.join(', ')) : '') + (c.org ? ' · ' + esc(c.org) : '') + '</span></span>' +
@@ -542,6 +575,8 @@
         '<p class="mx-hint">ייבוא מגוגל: היכנסו ל-contacts.google.com ← "ייצוא" ← Google CSV או vCard, ואז "ייבוא" כאן. גם קובץ מ-Outlook או מהטלפון (vcf) מתאים. הייבוא נעשה במחשב בלבד, בלי חיבור לחשבון.</p></div>') + '</div>');
     var qi = $('mx-cq'); qi.oninput = function () { clearTimeout(qi._t); qi._t = setTimeout(function () { showContacts(qi.value.trim()); qi = $('mx-cq'); }, 300); };
     if (q) { qi.focus(); qi.setSelectionRange(q.length, q.length); }
+    $('mx-csort').onchange = function () { S.cSort = this.value; S.cLetter = ''; showContacts(q); };
+    document.querySelectorAll('[data-abc]').forEach(function (b) { b.onclick = function () { S.cLetter = b.dataset.abc; showContacts(q); }; });
     $('mx-cadd').onclick = function () { editContact({ name: '', emails: [], phones: [] }); };
     $('mx-cexp').onclick = function () {
       if (!S.contacts.length) { toast('אין אנשי קשר לייצוא'); return; }

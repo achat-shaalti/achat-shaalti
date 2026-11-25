@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "com.chadbedera.mail",
   "name": "דואר",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "stability": "beta",
   "description": "דואר בתוך אוצריא דרך אחת שאלתי: קבלה, שליחה ותזמון, טיוטות ואנשי קשר. עובד גם בלי רשת עם דואר שמור. בסגנון Gmail בצבעי אוצריא.",
   "author": "חד בדרא",
