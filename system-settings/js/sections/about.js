@@ -61,6 +61,14 @@
     },
     load: async function (body) {
       var slot = body.querySelector('[data-slot=bridge]');
+      /* מסך פתיחה עם הסמל — מתג כיבוי */
+      var spOn = true; try { spOn = localStorage.getItem('hb.splash') !== 'false'; } catch (e) { /* כלום */ }
+      var spRow = document.createElement('div');
+      spRow.className = 'card';
+      spRow.innerHTML = '<div class="setting-row"><div class="setting-text"><b>מסך פתיחה</b><span class="muted">הסמל בגדול לשנייה בפתיחת הגדרות מערכת</span></div>' + ui.switchHtml('ss-splash', spOn, 'מסך פתיחה') + '</div>';
+      slot.parentNode.insertBefore(spRow, slot);
+      var spSw = spRow.querySelector('#ss-splash');
+      spSw.addEventListener('click', function () { spOn = !spOn; try { localStorage.setItem('hb.splash', String(spOn)); } catch (e) { /* כלום */ } ui.setSwitch(spSw, spOn); });
       var h = null;
       try { h = await SS.bridge.probe(); } catch (e) { h = null; }
       SS.setStatus(!!h);

@@ -150,6 +150,8 @@ public static class HardLock
     {
         public string[] Programs { get; private init; }        // כל רשומה: אובייקט JSON כטקסט, כמו ב-kiosk.programs
         public bool? AutoTorah { get; private init; }
+        /// <summary>תוכנות מותרות גם בתיקייה שהמשתמש יכול לכתוב אליה (כמו כתבי הקודש ב-AppData) — עם נעיצת SHA/מפרסם</summary>
+        public bool? AllowWritable { get; private init; }
         public string[] AutoTorahKeywords { get; private init; }
         public string OtzariaPath { get; private init; }        // "" = זיהוי אוטומטי (בלי נתיב מוגדר)
         /// <summary>WHY (T1): SHA-256 של אוצריא שהשירות מחזיק (נשמר בסיסמה). אוצריא במיקום כתיב תופעל רק אם הקובץ תואם. "" = אין נעיצה</summary>
@@ -171,6 +173,7 @@ public static class HardLock
                 {
                     Programs = Strs(o["programs"], json: true),
                     AutoTorah = o["autoTorahPrograms"] is JsonValue at ? at.GetValue<bool>() : null,
+                    AllowWritable = o["allowWritablePrograms"] is JsonValue aw ? aw.GetValue<bool>() : null,
                     AutoTorahKeywords = Strs(o["autoTorahKeywords"], json: false),
                     OtzariaPath = o["otzariaPath"]?.ToString(),
                     OtzariaSha256 = o["otzariaSha256"]?.ToString(),
@@ -257,11 +260,12 @@ public static class HardLock
     }
 
     /// <summary>רשימת התוכנות המותרות (הידנית) והגדרות הזיהוי האוטומטי → השירות</summary>
-    public static void SetPrograms(string password, JsonArray programs, bool autoTorah, IEnumerable<string> keywords) =>
+    public static void SetPrograms(string password, JsonArray programs, bool autoTorah, IEnumerable<string> keywords, bool allowWritable = false) =>
         PushSettings(password, new JsonObject
         {
             ["programs"] = programs,
             ["autoTorahPrograms"] = autoTorah,
+            ["allowWritablePrograms"] = allowWritable,
             ["autoTorahKeywords"] = new JsonArray((keywords ?? Array.Empty<string>()).Select(k => (JsonNode)k).ToArray()),
         });
 
@@ -1428,7 +1432,7 @@ public class HardLockService : ServiceBase
 
     // ---------- מדיניות הנעילה (מקור האמת כשהשירות מותקן) ----------
 
-    private static readonly string[] PolicyKeys = { "programs", "autoTorahPrograms", "autoTorahKeywords", "otzariaPath", "otzariaSha256", "fxPolicy" };
+    private static readonly string[] PolicyKeys = { "programs", "autoTorahPrograms", "allowWritablePrograms", "autoTorahKeywords", "otzariaPath", "otzariaSha256", "fxPolicy" };
 
     /// <summary>
     /// נתיב אוצריא שמגיע עם "enable". WHY (U1): "enable" עקף את ParsePolicy (נתיב לא תקין/מעטפת/מנהל מערכת נכנסו ישירות למצב), ונתיב שהשתנה השאיר נעיצת
@@ -1495,6 +1499,7 @@ public class HardLockService : ServiceBase
             res["programs"] = clean;
         }
         if (q["autoTorahPrograms"] is JsonValue at) res["autoTorahPrograms"] = at.GetValue<bool>();
+        if (q["allowWritablePrograms"] is JsonValue aw) res["allowWritablePrograms"] = aw.GetValue<bool>();
         if (q["autoTorahKeywords"] is JsonNode kn)
         {
             if (kn is not JsonArray ka || ka.Count > 50) return Err("bad_request", "רשימת מילות המפתח אינה תקינה");

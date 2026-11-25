@@ -8,8 +8,21 @@
   <link rel="stylesheet" href="css/app.css">
   <link rel="stylesheet" href="css/modern.css">
   <link rel="stylesheet" href="css/win11.css">
+  <style>
+    .hb-splash { position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+      background: var(--color-surface); color: var(--color-primary); font-size: 1.6rem; transition: opacity .4s ease; }
+    .hb-splash img { width: 160px; height: 160px; }
+    .hb-splash.out { opacity: 0; pointer-events: none; }
+  </style>
 </head>
 <body>
+  <div id="hb-splash" class="hb-splash" aria-hidden="true"><img src="icon/brand.svg" alt=""><b>הגדרות מערכת</b></div>
+  <script>/* מסך פתיחה עם הסמל; כיבוי בהגדרות ("מסך פתיחה") */
+    (function () { var el = document.getElementById('hb-splash'), off = false;
+      try { off = localStorage.getItem('hb.splash') === 'false'; } catch (e) { /* כלום */ }
+      if (off) { el.remove(); return; }
+      setTimeout(function () { el.classList.add('out'); setTimeout(function () { el.remove(); }, 450); }, 900); })();
+  </script>
   <div class="app-shell">
     <header class="topbar">
       <h1>הגדרות מערכת</h1>

@@ -88,9 +88,12 @@ public static class Program
                     Lang.T("סיסמה: ", "Password: "),
                     Lang.T("אזהרה: סיסמה בשורת הפקודה נחשפת לתהליכים אחרים. העדיפו --password (בלי ערך) או --password - עם stdin.",
                            "Warning: a password on the command line is visible to other processes. Prefer --password with no value, or --password - with stdin."));
+                bool pwSet = Kiosk.PasswordConfigured;
                 string err = Installer.Uninstall(pwd);
                 Console.WriteLine(err ?? Lang.T("הגשר הוסר.", "The bridge was removed."));
-                return err == null ? 0 : 2;
+                // 11.2026: קוד 3 = נדרשת סיסמה; 2 = כשל אחר. WHY: תוכנית ההסרה ביקשה סיסמה בכל כשל, גם כשלא הוגדרה סיסמה כלל
+                try { File.WriteAllText(Path.Combine(Path.GetTempPath(), "otzaria-bridge-uninstall.txt"), err ?? ""); } catch { }
+                return err == null ? 0 : pwSet ? 3 : 2;
             }
             if (Has("--install") || (!Installer.IsRunningFromInstallDir() && !Has("--portable")))
             {

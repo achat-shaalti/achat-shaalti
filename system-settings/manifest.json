@@ -1,7 +1,7 @@
 {
   "id": "com.chadbedera.systemsettings",
   "name": "הגדרות מערכת",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "כל הגדרות המחשב מתוך אוצריא: מסך, שמע, חשמל, שעה, רשת ומדפסות, ומצב נעילה ללימוד. פועל בלי אינטרנט. דורש את אחת שאלתי.",
   "author": "חד בדרא, יאיר דניאל",
   "homepage": "https://github.com/achat-shaalti/achat-shaalti",
