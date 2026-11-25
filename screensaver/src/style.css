@@ -132,3 +132,7 @@ input[type=time]{background:var(--color-surface);color:var(--color-on-surface);b
 #ss[data-m=bookq] #ssQuote{display:flex;inset:44% 0 0 0;justify-content:flex-start;padding-top:3vh}
 #ss[data-m=bookq] #ssQuote .t{font-size:clamp(18px,3vw,34px)}
 .mb .toc a{white-space:normal;max-width:100%}
+
+/* 2.2.0: כפתור הגדרות בשומר המסך */
+#ss #ssGear{display:block;position:absolute;top:0.6em;left:0.6em;background:transparent;border:0;color:inherit;opacity:.35;font-size:1.4em;cursor:pointer}
+#ss #ssGear:hover{opacity:.9}

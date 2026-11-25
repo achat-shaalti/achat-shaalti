@@ -1,9 +1,9 @@
 /* שומר מסך לאוצריא – חד בדרא – v1.3.0 */
 (function(){
 'use strict';
-var VERSION='2.1.0';
+var VERSION='2.2.0';
 var DEFAULTS={enabled:true,keepAwake:true,onlyInBook:true,idleMin:2,runMin:10,style:'brand',v:2,slogan:'אוצריא מאגר תורני חינמי, רחב ומהיר לשימוש בכל מקום.',bg:'light',bgColor:'#f6ede5',showClock:false,showVerse:true,quotesLib:true,quiet:false,quietFrom:'12:00',quietTo:'13:30'};
-var STYLES=[['brand','ספר וסלוגן','כמו באתר אוצריא','bk'],['splash','ספר נפתח','מקומות משתנים','bk'],['float','ספר צף','מרחף על המסך','bk'],['bubbles','בועות אוצריא','בועות עם הספר','bk'],['quotes','ציטוטים','עם קישור למקור','"'],['bookq','ספר וציטוטים','ספר פתוח ומתחתיו ציטוט','bk']];
+var STYLES=[['brand','ספר וסלוגן','כמו באתר אוצריא','bk'],['splash','ספר נפתח','מקומות משתנים','bk'],['float','ספר צף','מרחף על המסך','bk'],['bubbles','בועות אוצריא','בועות עם הספר','bk'],['quotes','ציטוטים','עם קישור למקור','"'],['bookq','ספר וציטוטים','ספר פתוח ומתחתיו ציטוט','bk'],['mix','מתחלף','בכל פעם סגנון אחר','bk']];
 var QUOTES=[
  {t:'וידוע לחכמי האמת שיש מלאך א\' נקרא ש"ד והוא שומר דפין על מי שמניח ספר פתוח ויוצא שמשכח תלמודו',src:'ש"ך יורה דעה רעז, ס"ק א',refs:['שפתי כהן יורה דעה רעז','ש"ך יורה דעה רעז']},
  {t:'לֹא יָמוּשׁ סֵפֶר הַתּוֹרָה הַזֶּה מִפִּיךָ, וְהָגִיתָ בּוֹ יוֹמָם וָלַיְלָה',src:'יהושע א, ח',refs:['יהושע א:ח','יהושע א']},
@@ -64,6 +64,7 @@ var SRC_PC={t:'מסך מחשב – סעיף י"ד בקובץ',
  ],
  refs:[['ש"ך יו"ד רעז – לפתיחה בספרייה',['שפתי כהן יורה דעה רעז','ש"ך יורה דעה רעז']],['שולחן ערוך יו"ד רעז',['שולחן ערוך יורה דעה רעז']]]};
 var LOG=[
+ ['2.2.0',['סגנון חדש "מתחלף": בכל הפעלה סגנון אחר','כפתור הגדרות (⚙) בפינת שומר המסך','בסגנונות הציטוטים תזוזת העכבר לא סוגרת, כדי שאפשר יהיה ללחוץ על הקישור ולפתוח את המקור בספרייה; לחיצה או מקש — חזרה ללימוד']],
  ['2.1.0',['לא קופץ באמצע כתיבה או גלילה: כשהגשר "אחת שאלתי" מותקן, נבדק הזמן מאז הפעולה האחרונה במחשב כולו (מקלדת, עכבר, גלילה). בלי הגשר — כמו קודם, לפי השינויים בקורא','בסיום חוזרים לכרטיסייה שהייתה פתוחה, ולא לזו שלפניה']],
  ['2.0.1',['מספר גרסה גבוה מ-2.0.0 שהופץ בהתקנת אחת שאלתי, כדי שכל המשתמשים יקבלו עדכונים מהחנות. התוכן זהה ל-1.7.0']],
  ['1.7.0',['יציבה. תיקון: הסלוגן הופיע בפינה העליונה בסגנונות "ספר נפתח" ו"ספר צף"','"אוצריא בהיר" = צבע הרקע של אוצריא, "אוצריא כהה" = צבע הבחירה בגוון כהה; מתעדכן מיד כשמשנים צבע באוצריא','ציטוטים: רק פסוקים ומאמרי חז"ל נבחרים על לימוד התורה וניצול הזמן — בלי קטעים אקראיים, סימונים או אנגלית','סגנון חדש: "ספר וציטוטים"','"הלכות": כותרות התוכן מלאות (לא נחתכות), בלי מילים באנגלית','פועל בלי אינטרנט']],
@@ -121,7 +122,7 @@ function fillUI(){
 function commit(){readUI();$('bgColor').style.display=st.bg==='custom'?'':'none';document.querySelectorAll('.sty').forEach(function(l){l.classList.toggle('sel',l.querySelector('input').checked)});save();armIdle()}
 
 /* ---- בניית ממשק ---- */
-var MINI={splash:'<div class="mini op"></div>',brand:'<div class="mini" style="margin-top:-8px"></div><small class="w">אוצריא</small>',float:'<div class="mini fl"></div>',bubbles:'<i class="bub" style="left:14px"></i><i class="bub" style="left:50px;animation-delay:-1s"></i><i class="bub" style="left:86px;animation-delay:-2s"></i>',quotes:'<span style="font-size:11px;padding:0 6px;line-height:1.3">״והגית בו יומם ולילה״</span>'};
+var MINI={splash:'<div class="mini op"></div>',brand:'<div class="mini" style="margin-top:-8px"></div><small class="w">אוצריא</small>',float:'<div class="mini fl"></div>',bubbles:'<i class="bub" style="left:14px"></i><i class="bub" style="left:50px;animation-delay:-1s"></i><i class="bub" style="left:86px;animation-delay:-2s"></i>',quotes:'<span style="font-size:11px;padding:0 6px;line-height:1.3">״והגית בו יומם ולילה״</span>',mix:'<span style="font-size:18px">🔀</span>'};
 function buildStyles(){
   var g=$('styles');STYLES.forEach(function(s){
     var l=document.createElement('label');l.className='sty';
@@ -199,8 +200,10 @@ async function holdAwake(){try{if(st.keepAwake&&navigator.wakeLock)wake=await na
 function releaseAwake(){try{if(wake){wake.release();wake=null}}catch(e){}}
 function start(isAuto){
   if(active)return;active=true;auto=!!isAuto;startedAt=Date.now();startXY=null;holdAwake();
-  var ss=$('ss');ss.dataset.m=st.style;applyBg(ss);ss.classList.toggle('clock',!!st.showClock);ss.classList.toggle('nv',!st.showVerse);if(st.showClock){tickClock();clearInterval(clockTimer);clockTimer=setInterval(tickClock,15000)}ss.classList.add('on');
-  ({splash:function(){runBook(false)},brand:function(){runBook(true)},bookq:function(){runBook(true);runQuotes()},float:runFloat,bubbles:runBubbles,quotes:runQuotes}[st.style]||function(){runBook(false)})();
+  /* 2.2.0 (#416): "מתחלף" בוחר בכל הפעלה סגנון אחר */
+  var sty=st.style==='mix'?STYLES.filter(function(x){return x[0]!=='mix'})[Math.floor(Math.random()*(STYLES.length-1))][0]:st.style;
+  var ss=$('ss');ss.dataset.m=sty;$('ssHint').textContent=/quotes|bookq/.test(sty)?'לחיצה או מקש — חזרה ללימוד':'הזיזו את העכבר או הקישו מקש כדי לחזור ללימוד';applyBg(ss);ss.classList.toggle('clock',!!st.showClock);ss.classList.toggle('nv',!st.showVerse);if(st.showClock){tickClock();clearInterval(clockTimer);clockTimer=setInterval(tickClock,15000)}ss.classList.add('on');
+  ({splash:function(){runBook(false)},brand:function(){runBook(true)},bookq:function(){runBook(true);runQuotes()},float:runFloat,bubbles:runBubbles,quotes:runQuotes}[sty]||function(){runBook(false)})();
   clearTimeout(runTimer);runTimer=setTimeout(function(){stop(true)},st.runMin*60000);
 }
 function stop(rearm){
@@ -222,10 +225,14 @@ function activity(e){
   if(active){
     if(Date.now()-startedAt<900)return;
     if(e.type==='mousemove'){if(!startXY){startXY=[e.clientX,e.clientY];return}if(Math.abs(e.clientX-startXY[0])+Math.abs(e.clientY-startXY[1])<12)return}
-    if(e.target&&e.target.id==='ssLink')return;
+    if(e.target&&(e.target.id==='ssLink'||e.target.id==='ssGear'))return;
+    /* 2.2.0 (#418): בסגנונות עם ציטוט תזוזת עכבר לא סוגרת, כדי שאפשר יהיה להגיע לקישור למקור */
+    if(e.type==='mousemove'&&/quotes|bookq/.test($('ss').dataset.m))return;
     stop(true);
   }else armIdle();
 }
+/* 2.2.0 (#415): כפתור הגדרות בשומר המסך — עוצר ונשאר בדף התוסף */
+$('ssGear').addEventListener('click',function(ev){ev.stopPropagation();auto=false;stop(true);window.scrollTo(0,0)});
 ['mousemove','mousedown','keydown','touchstart','wheel','scroll'].forEach(function(v){window.addEventListener(v,activity,{passive:true,capture:true})});
 
 /* ---- סגנונות ---- */
