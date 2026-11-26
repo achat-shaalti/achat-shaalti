@@ -664,6 +664,9 @@
       '<label class="mx-f"><span>חתימה</span><textarea id="mx-s-sig" class="mx-c-body sm" dir="auto">' + esc(st.signature) + '</textarea></label>' +
       chk('mx-s-autoc', 'לשמור אוטומטית באנשי הקשר את מי שאני כותב/ת אליו', st.autoContacts) +
       '<p class="mx-hint">נתונים שמורים במחשב: ' + mb(used) + '</p>' +
+      '<details class="mx-cl"><summary>יומן שינויים</summary>' + (window.MAIL_CHANGELOG || []).map(function (v) {
+        return '<h4>' + esc(v[0]) + '</h4><ul>' + v[1].map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+      }).join('') + '</details>' +
       '<div class="mx-acts"><button class="mx-btn tx" id="mx-s-clear">מחיקת הדואר השמור</button><button class="mx-btn" id="mx-s-save">שמירה</button></div>' +
       '<p class="mx-hint">גרסה ' + esc(VERSION) + '. שליחה מתוזמנת ושליחה כשהרשת חוזרת מתבצעות באחת שאלתי, גם כשהתוסף סגור. מה שנכתב בלי אחת שאלתי נשמר כאן ונמסר לה כשהיא פועלת.</p></div>');
     if ($('mx-acctbtn')) $('mx-acctbtn').onclick = setup;
@@ -723,7 +726,10 @@
       var i = /gmail|googlemail/.test(d) ? 0 : /outlook|hotmail|live|msn/.test(d) ? 1 : /yahoo/.test(d) ? 2 : /icloud|me\.com|mac\.com/.test(d) ? 3 : -1;
       if (i >= 0) pick(i);
     };
-    if (!cur) pick(0);
+    if (!cur) {
+      pick(0);
+      otzEmail().then(function (em) { if (em && !$('mx-email').value) { $('mx-email').value = em; $('mx-email').oninput(); } });
+    }
     $('mx-cancel').onclick = function () { openFolder(S.folder); };
     if ($('mx-remove')) $('mx-remove').onclick = async function () {
       try { await B.call('/mail/account/clear', {}); S.acct = null; save(LS_ACCT, null); S.live = false; $('mx-acct').textContent = ''; setStatus(); setup(); toast('החשבון הוסר (הדואר השמור נשאר; אפשר למחוק אותו בהגדרות)'); }
@@ -741,8 +747,30 @@
         toast('החשבון חובר');
         S.folder = 'INBOX';
         await tryConnect(); openFolder('INBOX');
+        if (!String(S.acct && S.acct.name || '').trim()) fillNameFromSent();
       } catch (e) { $('mx-err').textContent = errMsg(e); btn.disabled = false; btn.textContent = 'חיבור'; }
     };
+  }
+
+  /* כתובת המייל שהוגדרה באוצריא (הגדרות ← דיווח על שגיאות) */
+  async function otzEmail() {
+    try { var r = await window.Otzaria.call('app.getUserEmail', {}); var d = r && (r.data || r); return String(d && d.email || '').trim(); } catch (e) { return ''; }
+  }
+  /* בלי שם בחשבון: השם מההודעה האחרונה ביוצא (ב-Gmail זה השם בחשבון Google) */
+  async function fillNameFromSent() {
+    try {
+      var f = (S.folders || []).filter(function (x) { return x.role === 'sent'; })[0];
+      if (!f || !S.acct) return;
+      var r = await B.call('/mail/list', { folder: f.id, offset: 0, limit: 5 }, { timeoutMs: 60000 });
+      var me = String(S.acct.email || '').toLowerCase();
+      var m = (r.items || []).filter(function (x) { return String(x.fromAddress || '').toLowerCase() === me && x.from && x.from.indexOf('@') < 0; })[0];
+      if (!m) return;
+      var name = String(m.from).replace(/^["'\s]+|["'\s]+$/g, '');
+      S.acct = await B.call('/mail/account/set', { name: name, email: S.acct.email, password: '', host: S.acct.host, port: S.acct.port,
+        smtpHost: S.acct.smtpHost, smtpPort: S.acct.smtpPort, user: S.acct.user || S.acct.email }, { timeoutMs: 60000 });
+      save(LS_ACCT, S.acct);
+      toast('השם בחשבון: ' + name);
+    } catch (e) { /* לא חובה */ }
   }
 
   /* ---------- עזרים ---------- */
@@ -776,7 +804,7 @@
   window.addEventListener('online', function () { if (!S.live) tryConnect(true).then(function (ok) { if (ok && S.view === 'folder' && !S.msg) syncFolder(true); }); });
 
   /* ---------- אתחול ---------- */
-  var VERSION = '1.0.0';
+  var VERSION = '1.4.0';
   $('mx-menu').innerHTML = ic('menu'); $('mx-refresh').innerHTML = ic('refresh'); $('mx-settings').innerHTML = ic('gear');
   document.querySelector('.mx-sic').innerHTML = ic('search');
   $('mx-compose-btn').innerHTML = ic('pen') + '<span>כתיבה</span>';

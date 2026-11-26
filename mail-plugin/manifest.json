@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "com.chadbedera.mail",
   "name": "דואר",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "stability": "beta",
   "description": "דואר בתוך אוצריא דרך אחת שאלתי: קבלה, שליחה ותזמון, טיוטות ואנשי קשר. עובד גם בלי רשת עם דואר שמור. בסגנון Gmail בצבעי אוצריא.",
-  "author": "חד בדרא",
+  "author": "המחשב התורני",
   "entrypoint": "index.html",
   "icon": "icon/icon.png",
   "minAppVersion": "0.9.98",
@@ -13,6 +13,7 @@
   "permissions": [
     "network.localhost",
     "app.open_url",
+    "app.user_email.read",
     "plugin.open_other",
     "events.subscribe:theme.changed"
   ],
