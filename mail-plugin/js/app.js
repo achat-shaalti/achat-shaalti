@@ -130,7 +130,7 @@
   $('mx-folders').onclick = function (e) {
     var li = e.target.closest('li[data-view]'); if (!li) return;
     var v = li.dataset.view;
-    if (v === 'folder') { S.q = ''; $('mx-q').value = ''; openFolder(li.dataset.id); }
+    if (v === 'folder') { S.q = ''; S.mfrom = ''; $('mx-q').value = ''; openFolder(li.dataset.id); }
     else if (v === 'drafts') showDrafts(); else if (v === 'outbox') showOutbox(); else if (v === 'contacts') showContacts(); else showSettings();
   };
 
@@ -145,7 +145,14 @@
   var LS = { get: function (k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }, set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) { /* */ } } };
   S.ms = LS.get('mx.sort', 'new'); S.mf = LS.get('mx.filter', 'all');
   var nameOf = function (m) { return String(m.from || m.fromAddress || '').replace(/^["'\s]+/, ''); };
+  var keyOf = function (m) { return String(m.fromAddress || m.from || '').trim().toLowerCase(); };
+  S.mfrom = '';
   function sortFilter(all) {
+    /* 1.3.0: רשימת השולחים בתיקייה (לסינון לפי שולח), לפי א-ב */
+    var seen = {}; S.senders = [];
+    all.forEach(function (m) { var k = keyOf(m); if (k && !seen[k]) { seen[k] = 1; S.senders.push({ k: k, n: nameOf(m) || k }); } });
+    S.senders.sort(function (a, b) { return a.n.localeCompare(b.n, 'he'); });
+    if (S.mfrom) all = all.filter(function (m) { return keyOf(m) === S.mfrom; });
     if (S.mf === 'unread') all = all.filter(function (m) { return !m.seen; });
     else if (S.mf === 'flagged') all = all.filter(function (m) { return m.flagged; });
     else if (S.mf === 'attach') all = all.filter(function (m) { return m.attach; });
@@ -161,7 +168,9 @@
   function sortBar() {
     var o = function (v, t, cur) { return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + t + '</option>'; };
     return '<select class="mx-c-f mx-sel" id="mx-sort" title="מיון">' + o('new', 'חדשות קודם', S.ms) + o('old', 'ישנות קודם', S.ms) + o('from', 'שולח א–ת', S.ms) + o('fromz', 'שולח ת–א', S.ms) + o('subject', 'נושא א–ת', S.ms) + o('unread', 'לא נקראו קודם', S.ms) + '</select>' +
-      '<select class="mx-c-f mx-sel" id="mx-filt" title="סינון">' + o('all', 'כל ההודעות', S.mf) + o('unread', 'לא נקראו', S.mf) + o('flagged', 'עם כוכב', S.mf) + o('attach', 'עם קובץ מצורף', S.mf) + '</select>';
+      '<select class="mx-c-f mx-sel" id="mx-filt" title="סינון">' + o('all', 'כל ההודעות', S.mf) + o('unread', 'לא נקראו', S.mf) + o('flagged', 'עם כוכב', S.mf) + o('attach', 'עם קובץ מצורף', S.mf) + '</select>' +
+      '<select class="mx-c-f mx-sel" id="mx-fromf" title="סינון לפי שולח"><option value="">כל השולחים</option>' +
+      (S.senders || []).map(function (x) { return '<option value="' + esc(x.k) + '"' + (x.k === S.mfrom ? ' selected' : '') + '>' + esc(x.n) + '</option>'; }).join('') + '</select>';
   }
   async function renderCached() {
     var all = [];
@@ -214,7 +223,7 @@
       '<button class="mx-ib" id="mx-nx" title="ישנות יותר"' + (to < S.total ? '' : ' disabled') + '>' + ic('next') + '</button></div>' +
       '<div class="mx-list" id="mx-list">' + rows + '</div>');
     $('mx-r2').onclick = refresh;
-    if ($('mx-sort')) { $('mx-sort').onchange = function () { S.ms = this.value; LS.set('mx.sort', S.ms); S.offset = 0; renderCached(); }; $('mx-filt').onchange = function () { S.mf = this.value; LS.set('mx.filter', S.mf); S.offset = 0; renderCached(); }; }
+    if ($('mx-sort')) { $('mx-sort').onchange = function () { S.ms = this.value; LS.set('mx.sort', S.ms); S.offset = 0; renderCached(); }; $('mx-filt').onchange = function () { S.mf = this.value; LS.set('mx.filter', S.mf); S.offset = 0; renderCached(); }; $('mx-fromf').onchange = function () { S.mfrom = this.value; S.offset = 0; renderCached(); }; }
     $('mx-all').onchange = function () { S.sel = {}; if (this.checked) S.items.forEach(function (m) { S.sel[m.uid] = 1; }); renderList(); };
     document.querySelectorAll('[data-bulk]').forEach(function (b) { b.onclick = function () { bulk(b.dataset.bulk); }; });
     if ($('mx-setup1')) $('mx-setup1').onclick = setup;
@@ -329,6 +338,7 @@
       '<div class="mx-hdr"><div class="mx-ava">' + esc(who.trim().charAt(0) || '?') + '</div><div class="mx-who"><b>' + esc(who) + '</b> ' +
       (d.fromAddress && d.fromAddress !== who ? '<small style="display:inline">&lt;' + esc(d.fromAddress) + '&gt;</small>' : '') +
       ' <button class="mx-btn tx sm" id="mx-addc" title="הוספה לאנשי הקשר">' + ic('plus') + '</button>' +
+      ' <button class="mx-btn tx sm" id="mx-bysnd" title="כל ההודעות מהשולח הזה">מהשולח הזה</button>' +
       '<small>אל: ' + esc(d.to) + (d.cc ? ' · עותק: ' + esc(d.cc) : '') + '</small></div><small>' + esc(fmtDate(d.date, true)) + '</small></div>' +
       (blocked ? '<div class="mx-imgs">' + blocked + ' תמונות מרוחקות הוסתרו (מטעמי פרטיות).' + (S.live || navigator.onLine ? ' <button class="mx-btn tx" id="mx-showimg">הצגת התמונות</button>' : '') + '</div>' : '') +
       body + (d.attachments && d.attachments.length ? '<div class="mx-atts">' + d.attachments.map(function (a) {
@@ -350,6 +360,7 @@
     $('mx-copy').onclick = function () { try { navigator.clipboard.writeText(d.text || (fr && fr.contentDocument ? fr.contentDocument.body.innerText : '')); toast('הטקסט הועתק'); } catch (e) { toast('ההעתקה נכשלה'); } };
     $('mx-print').onclick = function () { var w = fr && fr.contentWindow; try { if (w) w.print(); else window.print(); } catch (e) { window.print(); } };
     $('mx-addc').onclick = function () { editContact({ name: d.from, emails: [d.fromAddress].filter(Boolean), phones: [] }); };
+    $('mx-bysnd').onclick = function () { S.mfrom = String(d.fromAddress || d.from || '').trim().toLowerCase(); S.q = ''; S.msg = null; S.view = 'folder'; S.offset = 0; renderCached(); };
     $('mx-unread').onclick = async function () {
       if (!S.live) { toast('אפשר לסמן כלא נקרא כשיש חיבור'); return; }
       try { await B.call('/mail/flag', { folder: folder, uid: m.uid, seen: false }); m.seen = false; DBS.put('messages', Object.assign({}, cached || m, { key: DBS.msgKey(folder, m.uid), folder: folder, seen: false })); toast('סומן כלא נקרא'); S.msg = null; renderCached(); }
@@ -562,7 +573,8 @@
     main('<div class="mx-bar"><input class="mx-c-f mx-csearch" id="mx-cq" placeholder="חיפוש באנשי הקשר" value="' + esc(q || '') + '"><span class="mx-sp"></span>' +
       '<button class="mx-btn sm" id="mx-cadd">' + ic('plus') + 'איש קשר</button>' +
       '<label class="mx-btn tx sm">ייבוא (vCard / CSV)<input type="file" id="mx-cimp" accept=".vcf,.csv,text/vcard,text/csv" hidden></label>' +
-      '<button class="mx-btn tx sm" id="mx-cexp">ייצוא</button></div>' +
+      '<button class="mx-btn tx sm" id="mx-cexp">ייצוא</button>' +
+      '<button class="mx-btn tx sm" id="mx-charv" title="מוסיף לאנשי הקשר את כל מי ששלח אליך דואר שנשמר במחשב">סנכרון מהדואר</button></div>' +
       '<div class="mx-bar mx-abc"><select class="mx-c-f mx-sel" id="mx-csort" title="מיון">' +
         [['name', 'לפי שם'], ['email', 'לפי כתובת'], ['org', 'לפי ארגון']].map(function (x) { return '<option value="' + x[0] + '"' + ((S.cSort || 'name') === x[0] ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select>' +
         '<button class="mx-btn tx sm' + (S.cLetter ? '' : ' on') + '" data-abc="">הכול</button>' +
@@ -578,6 +590,14 @@
     $('mx-csort').onchange = function () { S.cSort = this.value; S.cLetter = ''; showContacts(q); };
     document.querySelectorAll('[data-abc]').forEach(function (b) { b.onclick = function () { S.cLetter = b.dataset.abc; showContacts(q); }; });
     $('mx-cadd').onclick = function () { editContact({ name: '', emails: [], phones: [] }); };
+    $('mx-charv').onclick = async function () {
+      var list = [], seen = {};
+      for (var f of (S.folders || [{ id: 'INBOX' }])) {
+        var ms = []; try { ms = await DBS.list(f.id); } catch (e) { ms = []; }
+        ms.forEach(function (m) { var e = String(m.fromAddress || '').trim(); if (e && !seen[e.toLowerCase()]) { seen[e.toLowerCase()] = 1; list.push({ name: m.from && m.from !== e ? m.from : '', emails: [e], phones: [] }); } });
+      }
+      var r = await mergeContacts(list); toast('נוספו או עודכנו ' + ((r && r.rows && r.rows.length) || 0) + ' אנשי קשר'); showContacts(q);
+    };
     $('mx-cexp').onclick = function () {
       if (!S.contacts.length) { toast('אין אנשי קשר לייצוא'); return; }
       var url = URL.createObjectURL(new Blob([MX.contacts.toVcf(S.contacts)], { type: 'text/vcard' }));
@@ -611,10 +631,11 @@
       '<label class="mx-f"><span>טלפונים</span><input id="mx-cp" dir="ltr" value="' + esc((c.phones || []).join(', ')) + '"></label>' +
       '<label class="mx-f"><span>ארגון</span><input id="mx-co" dir="auto" value="' + esc(c.org) + '"></label>' +
       '<label class="mx-f"><span>הערה</span><input id="mx-cno" dir="auto" value="' + esc(c.note) + '"></label>' +
-      '<div class="mx-acts">' + (isNew ? '' : '<button class="mx-btn tx" id="mx-cdel">מחיקה</button>') + '<button class="mx-btn tx" id="mx-ccan">ביטול</button><button class="mx-btn" id="mx-csave">שמירה</button></div></div>');
+      '<div class="mx-acts">' + (isNew ? '' : '<button class="mx-btn tx" id="mx-cdel">מחיקה</button><button class="mx-btn tx" id="mx-cmsgs">ההודעות שלו</button>') + '<button class="mx-btn tx" id="mx-ccan">ביטול</button><button class="mx-btn" id="mx-csave">שמירה</button></div></div>');
     function split(v) { return v.split(/[,;]/).map(function (x) { return x.trim(); }).filter(Boolean); }
     $('mx-ccan').onclick = function () { showContacts(); };
     if ($('mx-cdel')) $('mx-cdel').onclick = async function () { await DBS.del('contacts', c.id); toast('נמחק'); showContacts(); };
+    if ($('mx-cmsgs')) $('mx-cmsgs').onclick = function () { S.mfrom = String((c.emails || [])[0] || '').toLowerCase(); S.view = 'folder'; S.folder = 'INBOX'; S.q = ''; S.msg = null; S.offset = 0; renderCached(); };
     $('mx-csave').onclick = async function () {
       c.name = $('mx-cn').value.trim(); c.emails = split($('mx-ce').value); c.phones = split($('mx-cp').value); c.org = $('mx-co').value.trim(); c.note = $('mx-cno').value.trim();
       if (!c.name && !c.emails.length) { toast('צריך שם או מייל'); return; }
