@@ -236,6 +236,7 @@
         var v = {};
         (opt.fields || []).forEach(function (f) {
           var inp = form.querySelector('[name="' + f.name + '"]');
+          if (!inp) return;
           v[f.name] = f.type === 'checkbox' ? inp.checked : inp.value;
         });
         return v;
