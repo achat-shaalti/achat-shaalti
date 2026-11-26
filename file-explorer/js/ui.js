@@ -25,12 +25,40 @@
     outline: '--color-outline', outlineVariant: '--color-outline-variant',
     inverseSurface: '--color-inverse-surface', onInverseSurface: '--color-on-inverse-surface'
   };
+  /* מראה: 'otzaria' (ברירת מחדל, לפי ערכת אוצריא) | 'light' | 'dark' */
+  var lastHostTheme = null;
+  ui.themeMode = function () { try { var m = localStorage.getItem('ui.themeMode'); return m === 'light' || m === 'dark' ? m : 'otzaria'; } catch (e) { return 'otzaria'; } };
+  ui.setThemeMode = function (m) {
+    try { if (m === 'light' || m === 'dark') localStorage.setItem('ui.themeMode', m); else localStorage.removeItem('ui.themeMode'); } catch (e) { /* כלום */ }
+    ui.applyTheme(lastHostTheme);
+  };
+  ui.themePickerHtml = function () {
+    var m = ui.themeMode(), o = function (v, t) { return '<option value="' + v + '"' + (m === v ? ' selected' : '') + '>' + t + '</option>'; };
+    return '<label style="display:flex;align-items:center;gap:0.5em"><span>ערכת צבעים</span><select class="input" data-ui-theme>' +
+      o('otzaria', 'כמו אוצריא') + o('light', 'בהיר') + o('dark', 'כהה') + '</select></label>';
+  };
+  document.addEventListener('change', function (e) {
+    var c = e.target && e.target.closest && e.target.closest('[data-ui-theme]');
+    if (c) ui.setThemeMode(c.value);
+  });
   ui.applyTheme = function (theme) {
+    var mode = ui.themeMode(), root = document.documentElement;
+    if (theme && theme.colorScheme) lastHostTheme = theme;
+    document.body.classList.toggle('forced-theme', mode !== 'otzaria');
+    if (mode !== 'otzaria') {
+      Object.keys(MAP).forEach(function (k) { root.style.removeProperty(MAP[k]); });
+      root.style.removeProperty('--color-primary-subtle'); root.style.removeProperty('--color-secondary-subtle');
+      document.body.classList.remove('host-theme');
+      document.body.classList.toggle('dark-mode', mode === 'dark');
+      return;
+    }
+    theme = lastHostTheme;
     if (!theme || !theme.colorScheme) return;
-    var cs = theme.colorScheme, root = document.documentElement;
+    var cs = theme.colorScheme;
     Object.keys(MAP).forEach(function (k) { if (cs[k]) root.style.setProperty(MAP[k], cs[k]); });
     var ps = hexToRgba(cs.primary, 0.12); if (ps) root.style.setProperty('--color-primary-subtle', ps);
     var ss = hexToRgba(cs.secondary, 0.12); if (ss) root.style.setProperty('--color-secondary-subtle', ss);
+    document.body.classList.add('host-theme');
     document.body.classList.toggle('dark-mode', theme.mode === 'dark');
     var t = theme.typography;
     if (t) {

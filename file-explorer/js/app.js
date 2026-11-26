@@ -1127,6 +1127,7 @@
       '<img src="icon/brand.svg" alt="אחת שאלתי" width="144" height="144" style="display:block;margin:0 auto 12px">' +
       '<h3>סייר קבצים</h3><p class="muted">גרסה ' + FX.esc(FX.VERSION) + ' · חד בדרא, יאיר דניאל</p>' +
       '<p>עיון וניהול קבצים מתוך אוצריא: העתקה, העברה, מחיקה, שינוי שם, חיפוש, סל מיחזור, וצפייה ב-PDF, Word, טקסט ותמונות. עם אחת שאלתי — גישה לכל המחשב; בלעדיו — לתיקיות שאישרתם.</p></div></div>' +
+      '<div class="fx-set-card"><div class="fx-set-title">' + ic('info') + 'מראה</div>' + (ui.themePickerHtml ? ui.themePickerHtml() : '') + '</div>' +
       '<div class="fx-set-card"><div class="fx-set-title">' + ic('info') + 'דיווחים</div>' + (window.Feedback && window.Feedback.crashToggleHtml ? window.Feedback.crashToggleHtml() : '') + '</div>' +
       '<div class="fx-set-card"><div class="fx-set-title">' + ic('info') + 'אחת שאלתי</div>' +
       setRow(b ? 'מחובר · גרסה ' + FX.esc(b.version || '?') : 'הגשר אינו מחובר', b ? '' : 'בלי הגשר הסייר עובד על תיקיות שאישרתם בלבד',
@@ -1870,7 +1871,7 @@
   async function boot(payload) {
     if (S.booted) return;
     S.booted = true;
-    if (payload && payload.theme) ui.applyTheme(payload.theme);
+    ui.applyTheme(payload && payload.theme);
     if (payload && payload.plugin && payload.plugin.version) FX.VERSION = payload.plugin.version;
     setTimeout(function () { window.Feedback.reportCrashes({ plugin: 'סייר קבצים', version: FX.VERSION, bridge: FX.Bridge, restore: payload && payload.restore }); }, 6000);
     try { await window.I18N.init(payload); } catch (e) { /* נשארים בעברית */ }
