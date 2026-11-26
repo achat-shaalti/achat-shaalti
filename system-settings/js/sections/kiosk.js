@@ -5,7 +5,7 @@
   var ui = SS.ui;
   SS.sections = SS.sections || [];
 
-  var MIN_PW = 4;
+  var MIN_PW = 10;   /* כמו בגשר (Kiosk.MinPasswordLength) */
 
   SS.sections.push({
     id: 'kiosk', title: 'מצב נעילה', icon: 'lock',
