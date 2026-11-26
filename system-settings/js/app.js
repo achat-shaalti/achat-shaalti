@@ -505,7 +505,7 @@
   async function boot(payload) {
     if (state.booted) return;
     state.booted = true;
-    if (payload && payload.theme) onTheme(payload.theme);
+    if (payload && payload.theme) onTheme(payload.theme); else ui.applyTheme(null);
     try { await window.I18N.init(payload); } catch (e) { /* נשארים בעברית */ }
     var lb = document.getElementById('top-lang');
     lb.textContent = window.I18N.toggleLabel();

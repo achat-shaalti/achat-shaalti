@@ -55,7 +55,7 @@
 }
 
 /* dark defaults for the browser preview only (in Otzaria the host theme sets every role) */
-body.preview.dark-mode {
+body.preview.dark-mode, body.forced-theme.dark-mode {
   --color-primary: #A8C8FF; --color-on-primary: #05305F;
   --color-primary-container: #1F4677; --color-on-primary-container: #D6E3FF;
   --color-secondary: #BDC7DC; --color-on-secondary: #273141;
@@ -77,7 +77,7 @@ body.dark-mode { --color-ok: #81C784; }
    וכן בתצוגה מקדימה עצמאית בדפדפן עם מצב כהה במערכת. ערכי הצבע שהמארח מחיל (inline style על <html>)
    גוברים על כלל זה תמיד, בלי קשר לסלקטור, כך שאין התנגשות בתוך אוצריא עצמה. */
 @media (prefers-color-scheme: dark) {
-  body:not(.preview) {
+  body:not(.preview):not(.host-theme):not(.forced-theme) {
     --color-primary: #A8C8FF; --color-on-primary: #05305F;
     --color-primary-container: #1F4677; --color-on-primary-container: #D6E3FF;
     --color-secondary: #BDC7DC; --color-on-secondary: #273141;

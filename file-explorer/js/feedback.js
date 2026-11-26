@@ -42,8 +42,16 @@
   /* מתג בהגדרות: דיווח קריסות אוטומטי (ברירת מחדל: פעיל; אוצריא תמיד מבקשת אישור לפני שליחה) */
   FB.crashEnabled = function () { try { return localStorage.getItem('fb.crashOff') !== '1'; } catch (e) { return true; } };
   FB.setCrashEnabled = function (on) { try { if (on) localStorage.removeItem('fb.crashOff'); else { localStorage.setItem('fb.crashOff', '1'); localStorage.removeItem(QKEY); } } catch (e) { /* כלום */ } };
+  /* הצעה לפתוח את הדיווח גם בגיטהאב: כבויה כברירת מחדל (התוסף בחנות, הדיווחים מגיעים) */
+  FB.ghPromptEnabled = function () { try { return localStorage.getItem('fb.ghPrompt') === '1'; } catch (e) { return false; } };
+  document.addEventListener('change', function (e) {
+    var c = e.target && e.target.closest && e.target.closest('[data-fb-gh]');
+    if (c) { try { if (c.checked) localStorage.setItem('fb.ghPrompt', '1'); else localStorage.removeItem('fb.ghPrompt'); } catch (x) { /* כלום */ } }
+  });
   FB.crashToggleHtml = function () {
-    return '<label class="fb-crash-toggle" style="display:flex;align-items:center;gap:0.5em;cursor:pointer"><input type="checkbox" data-fb-crash' + (FB.crashEnabled() ? ' checked' : '') + '>' +
+    return '<label style="display:flex;align-items:center;gap:0.5em;cursor:pointer;margin-bottom:0.4em"><input type="checkbox" data-fb-gh' + (FB.ghPromptEnabled() ? ' checked' : '') + '>' +
+      '<span>אחרי שליחת הערה: להציע לפתוח אותה גם בגיטהאב</span></label>' +
+      '<label class="fb-crash-toggle" style="display:flex;align-items:center;gap:0.5em;cursor:pointer"><input type="checkbox" data-fb-crash' + (FB.crashEnabled() ? ' checked' : '') + '>' +
       '<span>דיווח קריסות אוטומטי (פעם אחת בהפעלה, באישורכם)</span></label>';
   };
   document.addEventListener('change', function (e) {
@@ -83,7 +91,7 @@
     if (val === 'sent' || val === 'queued') ui.toast(val === 'sent' ? 'ההערה נשלחה. תודה!' : 'ההערה תישלח כשיהיה חיבור. תודה!', 'success');
     else if (val === 'cancelled') { ui.toast('השליחה בוטלה', 'info'); return; }
     else ui.toast('השליחה נכשלה. אפשר לנסות שוב מאוחר יותר.', 'error');
-    await FB.githubFallback(ui, details, type[1] + ': ' + opts.plugin + ' ' + (opts.version || ''));
+    if (FB.ghPromptEnabled()) await FB.githubFallback(ui, details, type[1] + ': ' + opts.plugin + ' ' + (opts.version || ''));
   };
   /* ---------- דיווח קריסות אוטומטי דרך מערכת הדיווח של אוצריא (feedback.report, reportType: 'crash') ----------
      שגיאות JS שלא נתפסו נאספות לתור מקומי (עד 5, בלי כפילויות). באתחול הבא, או כשאוצריא טוענת את הדף
